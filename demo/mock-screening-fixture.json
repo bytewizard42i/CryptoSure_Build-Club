@@ -1,5 +1,5 @@
 {
-  "_comment": "SIMULATED DATA. Every address below is fictional and generated for the demo. None of these addresses correspond to any real sanctions designation. The demo app feeds this fixture to a mock screening provider; the real deployment replaces it with a live denylist feed (OFAC SDN, EU, UK OFSI, UN consolidated lists, or an aggregator oracle).",
+  "_comment": "SIMULATED DATA. Every address below is fictional and generated for the demo. None of these addresses correspond to any real sanctions designation. The demo app feeds this fixture to a mock screening provider; the real deployment replaces it with a live denylist feed: the SDN (Specially Designated Nationals) list from OFAC (US Treasury's Office of Foreign Assets Control), the EU (European Union) consolidated list, the UK list from OFSI (Office of Financial Sanctions Implementation), the UN (United Nations) consolidated list, or an aggregator oracle.",
   "listVersion": 1,
   "listSources": ["mock-OFAC-SDN", "mock-EU-consolidated", "mock-UK-OFSI", "mock-UN-consolidated"],
   "addresses": [
@@ -26,7 +26,7 @@
   ],
   "allowedJurisdictions": ["US-PA"],
   "mockKycProvider": {
-    "_comment": "Simulated KYC provider output. The app never receives name or address; it receives a CredentialBody preimage + salt, and the issuer role inserts persistentCommit(body, salt) into the kycCredentials tree.",
+    "_comment": "Simulated KYC (Know Your Customer, regulated identity verification) provider output. The app never receives name or address; it receives a CredentialBody preimage + salt, and the issuer role inserts persistentCommit(body, salt) into the kycCredentials tree.",
     "levels": { "1": "basic", "2": "enhanced" },
     "expiryGranularity": "month-rounded"
   }
