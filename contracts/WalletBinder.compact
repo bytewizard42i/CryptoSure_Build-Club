@@ -1,0 +1,419 @@
+// ============================================================================
+// CryptoSure — WalletBinder.compact
+// ============================================================================
+//
+// Privacy-preserving eligibility gate for attaching a wallet to an insurance
+// binder. A holder binds a wallet only after proving, in ONE zero-knowledge
+// proof, that all three of the following hold:
+//
+//   1. SANCTIONS  — the wallet was screened against the current denylist
+//                   and cleared (clearance leaf in the screening tree, at
+//                   or above the minimum accepted list version)
+//   2. KYC        — an approved issuer certified this holder at or above the
+//                   required level, credential unexpired and not revoked
+//   3. GEO        — the jurisdiction the issuer attested is on the allowed
+//                   list for this program
+//
+// Every check is a Merkle membership proof against a ledger tree, so the
+// chain learns that *some* eligible holder bound *some* screened wallet,
+// and nothing else. No raw wallet address, identity, or location is ever
+// written on-chain.
+//
+// WHY ONE CONTRACT
+//   Cross-contract calls are not yet available on Midnight, so splitting
+//   the gate across contracts would require an off-chain attestor to bridge
+//   them, and that attestor becomes a trust hole. Keeping all three trees
+//   in one contract lets a single circuit enforce the whole gate atomically.
+//
+// ROLES
+//   admin     — configures roles and the minimum accepted list version
+//   issuer    — a KYC provider (exchange, government, licensed vendor);
+//               inserts credential commitments and revokes them
+//   screener  — a sanctions screening provider; inserts clearance leaves
+//               after checking an address against OFAC/EU/UK/UN feeds
+//
+// DISCLOSED ON-CHAIN (by design, and nothing more)
+//   - Merkle roots being checked (not which leaf)
+//   - Binding nullifier  H(domain, walletHash): prevents double-binding,
+//     unlinkable to the raw address without the preimage
+//   - Revocation nullifier H(domain, credentialId): lets the issuer revoke;
+//     unlinkable to identity. Two bindings by the same credential share
+//     this value, so they are linkable to each other (not to a person).
+//   - Credential expiry: issuers should round expiry to coarse granularity
+//     (e.g., month) so the disclosed value is not a fingerprint.
+//   - Hidden commitments inserted into trees (leaf-hashed, not readable)
+//
+// PRIVACY BOUNDARY (honest statement)
+//   Sanctions screening is list-based, so the screener must see the address
+//   it screens, exactly as any compliance vendor does today. Midnight's
+//   contribution is that the result reaches the chain as a hidden leaf and
+//   the holder proves clearance without revealing which address was cleared.
+//
+// COMPILER
+//   compactc 0.35.x, language >= 0.27
+// ============================================================================
+
+pragma language_version >= 0.27;
+
+import CompactStandardLibrary;
+
+// ============================================================================
+// DATA STRUCTURES
+// ============================================================================
+
+// Preimage of a KYC credential leaf. The issuer computes
+// persistentCommit<CredentialBody>(body, salt) off-chain and inserts it;
+// the holder keeps body + salt to open it in-circuit later.
+struct CredentialBody {
+  holderPk: Bytes<32>;           // holder's derived public key
+  level: Uint<8>;                // 1 = basic, 2 = enhanced
+  jurisdictionLeaf: Bytes<32>;   // persistentHash of the jurisdiction code
+  credentialId: Bytes<32>;       // random id shared by issuer + holder
+  expiresAt: Uint<64>;           // unix seconds, coarse-rounded by issuer
+}
+
+// Preimage of a sanctions clearance leaf.
+struct ClearanceBody {
+  walletHash: Bytes<32>;         // persistentHash of "chain:address"
+  listVersion: Uint<64>;         // denylist version the screener checked
+}
+
+// Preimage of a wallet binding commitment.
+struct BindingBody {
+  holderPk: Bytes<32>;
+  walletHash: Bytes<32>;
+  policyRef: Bytes<32>;          // policy commitment this wallet is bound to
+}
+
+// ============================================================================
+// LEDGER STATE
+// ============================================================================
+
+// KYC credential commitments (issuer-inserted, holder-opened).
+export ledger kycCredentials: HistoricMerkleTree<16, Bytes<32>>;
+
+// Revoked credential nullifiers.
+export ledger revokedCredentials: Set<Bytes<32>>;
+
+// Allowed jurisdiction leaves, e.g. persistentHash("US-PA").
+export ledger allowedJurisdictions: HistoricMerkleTree<8, Bytes<32>>;
+
+// Sanctions clearances (screener-inserted, holder-opened).
+export ledger screeningClearances: HistoricMerkleTree<16, Bytes<32>>;
+
+// Clearances older than this list version are rejected (lists churn:
+// entries are added and delisted, so freshness must be enforced).
+export ledger minAcceptedListVersion: Uint<64>;
+
+// Wallet bindings (hidden commitments) + anti-double-bind nullifiers.
+export ledger walletBindings: HistoricMerkleTree<16, Bytes<32>>;
+export ledger bindingNullifiers: Set<Bytes<32>>;
+
+// Public counters for dashboards (aggregates only).
+export ledger credentialCount: Counter;
+export ledger clearanceCount: Counter;
+export ledger bindingCount: Counter;
+
+// Roles.
+export ledger admins: Set<Bytes<32>>;
+export ledger issuers: Set<Bytes<32>>;
+export ledger screeners: Set<Bytes<32>>;
+export ledger adminClaimed: Boolean;
+
+// ============================================================================
+// PRIVATE INPUTS (witnesses, supplied off-chain by the holder's SDK)
+// ============================================================================
+
+witness local_secret_key(): Bytes<32>;
+
+// Fresh randomness for commitments. Never reused.
+witness get_randomness(): Bytes<32>;
+
+// KYC credential opening + path.
+witness get_credential(): CredentialBody;
+witness get_credential_salt(): Bytes<32>;
+witness get_credential_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+// Jurisdiction path.
+witness get_jurisdiction_path(leaf: Bytes<32>): MerkleTreePath<8, Bytes<32>>;
+
+// Sanctions clearance opening + path.
+witness get_wallet_hash(): Bytes<32>;
+witness get_clearance_list_version(): Uint<64>;
+witness get_clearance_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+// Binding opening + path (for later claim-time proofs).
+witness get_binding_salt(): Bytes<32>;
+witness get_binding_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+// ============================================================================
+// KEY DERIVATION
+// ============================================================================
+
+export circuit derive_public_key(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:binder:pk:"),
+    sk
+  ]);
+}
+
+circuit caller_public_key(): Bytes<32> {
+  return derive_public_key(local_secret_key());
+}
+
+// ============================================================================
+// DOMAIN-SEPARATED DERIVATIONS (public helpers so SDKs match on-chain math)
+// ============================================================================
+
+// Jurisdiction leaf from a code such as "US-PA" (padded to 32 bytes).
+export circuit derive_jurisdiction_leaf(code: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:binder:geo:"),
+    code
+  ]);
+}
+
+// Clearance leaf: binds a wallet hash to the list version it was checked
+// against. The screener inserts this after an off-chain denylist check.
+export circuit derive_clearance_leaf(body: ClearanceBody): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([
+    pad(32, "cryptosure:binder:clear:"),
+    body.walletHash,
+    body.listVersion as Bytes<32>
+  ]);
+}
+
+// Revocation nullifier for a credential (distinct domain from the leaf).
+export circuit derive_revocation_nullifier(credential_id: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:binder:revoke:"),
+    credential_id
+  ]);
+}
+
+// Binding nullifier: one wallet, one active binding.
+export circuit derive_binding_nullifier(wallet_hash: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:binder:bind-nul:"),
+    wallet_hash
+  ]);
+}
+
+// ============================================================================
+// ROLE CHECKS
+// ============================================================================
+
+circuit assert_is_admin(): [] {
+  assert(admins.member(disclose(caller_public_key())), "Caller is not an admin");
+}
+
+circuit assert_is_issuer(): [] {
+  assert(issuers.member(disclose(caller_public_key())), "Caller is not an approved issuer");
+}
+
+circuit assert_is_screener(): [] {
+  assert(screeners.member(disclose(caller_public_key())), "Caller is not an approved screener");
+}
+
+// ============================================================================
+// CONSTRUCTOR + ROLE MANAGEMENT
+// ============================================================================
+
+constructor() {
+  adminClaimed = false;
+  minAcceptedListVersion = 0;
+}
+
+export circuit claim_admin(): [] {
+  assert(!adminClaimed, "Admin already claimed");
+  admins.insert(disclose(caller_public_key()));
+  adminClaimed = true;
+}
+
+export circuit add_admin(admin_pk: Bytes<32>): [] {
+  assert_is_admin();
+  admins.insert(disclose(admin_pk));
+}
+
+export circuit add_issuer(issuer_pk: Bytes<32>): [] {
+  assert_is_admin();
+  issuers.insert(disclose(issuer_pk));
+}
+
+export circuit remove_issuer(issuer_pk: Bytes<32>): [] {
+  assert_is_admin();
+  issuers.remove(disclose(issuer_pk));
+}
+
+export circuit add_screener(screener_pk: Bytes<32>): [] {
+  assert_is_admin();
+  screeners.insert(disclose(screener_pk));
+}
+
+export circuit remove_screener(screener_pk: Bytes<32>): [] {
+  assert_is_admin();
+  screeners.remove(disclose(screener_pk));
+}
+
+// Programs change jurisdictions by publishing a new allowed leaf.
+export circuit add_allowed_jurisdiction(code: Bytes<32>): [] {
+  assert_is_admin();
+  allowedJurisdictions.insert(disclose(derive_jurisdiction_leaf(code)));
+}
+
+// Raise the freshness floor after a denylist refresh. Clearances issued
+// against older list versions stop being acceptable.
+export circuit set_min_list_version(version: Uint<64>): [] {
+  assert_is_admin();
+  const v = disclose(version);
+  assert(v >= minAcceptedListVersion, "List version cannot move backwards");
+  minAcceptedListVersion = v;
+}
+
+// ============================================================================
+// ISSUER: KYC CREDENTIALS
+// ============================================================================
+
+// The issuer has already performed full KYC off-chain. It inserts only a
+// commitment; the leaf is hidden by the tree's leaf hash, and the preimage
+// (CredentialBody + salt) is handed to the holder out of band.
+export circuit issue_credential(credential_commitment: Bytes<32>): [] {
+  assert_is_issuer();
+  kycCredentials.insert(disclose(credential_commitment));
+  credentialCount.increment(1);
+}
+
+// Revocation publishes only the nullifier, never the credential or holder.
+export circuit revoke_credential(credential_id: Bytes<32>): [] {
+  assert_is_issuer();
+  const nul = disclose(derive_revocation_nullifier(credential_id));
+  assert(!revokedCredentials.member(nul), "Credential already revoked");
+  revokedCredentials.insert(nul);
+}
+
+// ============================================================================
+// SCREENER: SANCTIONS CLEARANCES
+// ============================================================================
+
+// The screener has checked the address against the denylist feeds at
+// `listVersion` and found no match. Only the derived leaf lands on-chain.
+export circuit record_clearance(body: ClearanceBody): [] {
+  assert_is_screener();
+  screeningClearances.insert(disclose(derive_clearance_leaf(body)));
+  clearanceCount.increment(1);
+}
+
+// ============================================================================
+// HOLDER: BIND WALLET (the gate)
+// ============================================================================
+
+// All three checks happen inside this one proof. Returns the binding
+// commitment so the policy layer can reference it.
+export circuit bind_wallet(
+  policy_ref: Bytes<32>,
+  min_kyc_level: Uint<8>
+): Bytes<32> {
+  const sk = local_secret_key();
+  const pk = derive_public_key(sk);
+
+  // ---- 2. KYC: open credential, prove membership, check level + expiry ----
+  const cred = get_credential();
+  assert(cred.holderPk == pk, "Credential does not belong to caller");
+
+  const credLeaf = persistentCommit<CredentialBody>(cred, get_credential_salt());
+  const credRoot = merkleTreePathRoot<16, Bytes<32>>(get_credential_path(credLeaf));
+  assert(kycCredentials.checkRoot(disclose(credRoot)), "KYC credential not found");
+
+  assert(disclose(cred.level >= min_kyc_level), "KYC level below requirement");
+  assert(blockTimeLt(disclose(cred.expiresAt)), "KYC credential expired");
+
+  const revokeNul = disclose(derive_revocation_nullifier(cred.credentialId));
+  assert(!revokedCredentials.member(revokeNul), "KYC credential revoked");
+
+  // ---- 3. GEO: the attested jurisdiction is on the allowed list ----
+  const geoRoot = merkleTreePathRoot<8, Bytes<32>>(
+    get_jurisdiction_path(cred.jurisdictionLeaf)
+  );
+  assert(allowedJurisdictions.checkRoot(disclose(geoRoot)), "Jurisdiction not eligible");
+
+  // ---- 1. SANCTIONS: wallet has a fresh clearance ----
+  const walletHash = get_wallet_hash();
+  const listVersion = get_clearance_list_version();
+  assert(disclose(listVersion >= minAcceptedListVersion), "Screening result is stale");
+
+  const clearLeaf = derive_clearance_leaf(ClearanceBody {
+    walletHash: walletHash,
+    listVersion: listVersion
+  });
+  const clearRoot = merkleTreePathRoot<16, Bytes<32>>(get_clearance_path(clearLeaf));
+  assert(screeningClearances.checkRoot(disclose(clearRoot)), "Wallet not cleared by screening");
+
+  // ---- Anti-double-bind ----
+  const bindNul = disclose(derive_binding_nullifier(walletHash));
+  assert(!bindingNullifiers.member(bindNul), "Wallet already bound to a policy");
+  bindingNullifiers.insert(bindNul);
+
+  // ---- Record the binding as a hidden commitment ----
+  const binding = persistentCommit<BindingBody>(
+    BindingBody { holderPk: pk, walletHash: walletHash, policyRef: policy_ref },
+    get_binding_salt()
+  );
+  walletBindings.insert(binding);
+  bindingCount.increment(1);
+
+  return binding;
+}
+
+// ============================================================================
+// HOLDER: PROVE BINDING (claim time)
+// ============================================================================
+
+// At claim time the holder proves "the wallet I am claiming on is the one
+// bound to this policy" without publishing the wallet. The adjuster learns
+// a boolean; the chain learns a root check.
+export circuit prove_binding(policy_ref: Bytes<32>): Boolean {
+  const pk = caller_public_key();
+  const walletHash = get_wallet_hash();
+
+  const binding = persistentCommit<BindingBody>(
+    BindingBody { holderPk: pk, walletHash: walletHash, policyRef: policy_ref },
+    get_binding_salt()
+  );
+  const root = merkleTreePathRoot<16, Bytes<32>>(get_binding_path(binding));
+  assert(walletBindings.checkRoot(disclose(root)), "No such binding");
+  return true;
+}
+
+// ============================================================================
+// ADMIN: RELEASE BINDING
+// ============================================================================
+
+// Used when a policy ends or a wallet must be re-screened (e.g., it later
+// appears on a denylist). Releasing the nullifier lets the wallet bind again
+// only after passing the full gate anew.
+export circuit release_binding(wallet_hash: Bytes<32>): [] {
+  assert_is_admin();
+  const nul = disclose(derive_binding_nullifier(wallet_hash));
+  assert(bindingNullifiers.member(nul), "Wallet is not bound");
+  bindingNullifiers.remove(nul);
+}
+
+// ============================================================================
+// PUBLIC QUERIES (aggregates only)
+// ============================================================================
+
+export circuit get_credential_count(): Uint<64> {
+  return credentialCount.read();
+}
+
+export circuit get_clearance_count(): Uint<64> {
+  return clearanceCount.read();
+}
+
+export circuit get_binding_count(): Uint<64> {
+  return bindingCount.read();
+}
+
+export circuit get_min_list_version(): Uint<64> {
+  return minAcceptedListVersion;
+}
