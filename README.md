@@ -45,6 +45,12 @@ The binding itself is a hidden commitment; at claim time the holder proves
 it. Denylists churn (entries get added and delisted), so every clearance
 carries a list version and the contract enforces a freshness floor.
 
+KYC itself is a black box to CryptoSure. A trusted issuer verifies the
+holder, [KYCz](https://github.com/bytewizard42i/KYCz_us_app) holds the
+anchor, and a thin facade hands CryptoSure a credential commitment and
+nothing more. The integration spec lives in the KYCz repo under
+`docs/integrations/cryptosure/`.
+
 Roles are explicit: an **issuer** (exchange, government provider, or
 licensed KYC vendor) inserts credential commitments; a **screener** inserts
 sanctions clearances; an **admin** manages roles, jurisdictions, and the
