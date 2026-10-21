@@ -127,6 +127,8 @@ contracts/
   WalletBinder.compact        the eligibility gate (compiles, full ZK keys)
 demo/
   mock-screening-fixture.json simulated addresses + mock KYC provider shape
+docs/pitch-resources/         one-liner, elevator pitch, paragraph, synopsis, major synopsis
+media/                        architecture diagrams
 ```
 
 ## See it
