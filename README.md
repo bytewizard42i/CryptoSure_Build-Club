@@ -141,6 +141,16 @@ media/                        architecture diagrams
 Early build. We are developing in the open where it helps and keeping the
 rest close where it matters.
 
+## Legal
+
+Copyright (c) 2026 EnterpriseZK Labs LLC. All rights reserved. This repository
+is published so it can be read and inspected; no license to copy, modify, or
+use its contents is granted.
+
+CryptoSure has not sold any policy. Nothing in this repository is an offer or
+solicitation of insurance, and nothing here is legal, actuarial, or insurance
+advice.
+
 ---
 
 *Built on Midnight. Built to last.*
