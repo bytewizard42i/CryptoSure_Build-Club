@@ -6,8 +6,11 @@
 
 ## 1. Why this exists
 
-Somewhere north of a hundred billion dollars of crypto sits in wallets with
-no insurance behind it. Most of that is not retail speculation. It is
+Crypto is a roughly two and a half trillion dollar asset class, and by common
+industry estimates only one to three percent of it carries any insurance.
+Market cap is not the same as insurable value at risk, but even a
+conservative slice of the uninsured remainder is enormous, and much of it is
+not retail speculation. It is
 company treasuries, custodians holding assets for their users, exchanges,
 payment platforms, funds, and the growing number of ordinary businesses that
 now hold digital assets as a matter of course. When those assets are lost to

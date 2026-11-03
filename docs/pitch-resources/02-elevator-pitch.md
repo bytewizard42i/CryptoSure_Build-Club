@@ -1,7 +1,7 @@
 # Elevator pitch (about two minutes spoken)
 
-Over a hundred billion dollars of crypto sits in wallets with no insurance,
-and most of it belongs to companies: treasuries, custodians, exchanges,
+Crypto is a two and a half trillion dollar asset class and almost none of it
+is insured, and a great deal of what is at risk belongs to companies: treasuries, custodians, exchanges,
 platforms holding assets for their users. The reason is not that crypto is
 uninsurable. It is the opposite. Every loss leaves a permanent, public trail.
 Ownership can be proven cryptographically. Losses can be prevented, traced,

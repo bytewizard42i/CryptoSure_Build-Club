@@ -5,14 +5,14 @@ paragraph, and why this has to be built this way.
 
 ## Problem, one sentence
 
-Over a hundred billion dollars of crypto sits uninsured, not because it can't
-be insured but because the people who need coverage most won't hand an insurer
+Crypto is a two and a half trillion dollar asset class and almost none of it
+is insured, not because it can't be insured but because the people who need coverage most won't hand an insurer
 their identity, their address, and their wallet.
 
 ## Problem, five sentences
 
-Over a hundred billion dollars of crypto sits in wallets with no insurance.
-Custodians lose institutional deals when clients ask "is it insured?",
+Crypto is a two and a half trillion dollar asset class, and only a small
+fraction of it carries any insurance. Custodians lose institutional deals when clients ask "is it insured?",
 companies carry the risk raw on their balance sheets, and individuals who get
 drained have nowhere to turn. The strange truth is that crypto is the most
 insurable asset ever made, because every loss leaves a permanent public trail and
@@ -75,6 +75,18 @@ is sealed with a third-party trusted issuer, so we hold a proof, not the
 person's file, and lawful access exists through a warrant on the issuer while
 we hold nothing. No other chain lets a contract verify those facts without
 publishing them.
+
+## A note on the numbers
+
+Total crypto market cap was roughly 2.6 trillion dollars at the time of
+writing (CoinGecko, Kraken, and TradingView all within a few percent of each
+other, November 2026). Industry commentary commonly puts the insured share at
+1 to 3 percent, against roughly 7 percent of GDP insured in the traditional
+economy. Market cap is not the same as insurable value at risk: a meaningful
+slice is in exchange cold storage that already carries some custody coverage,
+locked or vested tokens, and coins that are simply lost. The headline is
+trillions uninsured; the addressable slice for wallet-side coverage is
+smaller, and sizing it precisely is part of the pilot's job.
 
 ## Status
 
