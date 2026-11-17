@@ -36,9 +36,9 @@ three in a single ZK (zero-knowledge) proof on Midnight instead:
 
 | Check | What the chain sees | What it never sees |
 |---|---|---|
-| Sanctions | A Merkle root check against the screening tree | Which wallet was screened |
+| Banned-Address Sanctions | A Merkle root check against the screening tree | Which wallet was screened |
 | KYC | A root check, a level threshold passed, a coarse expiry | Name, documents, or which credential |
-| Jurisdiction | A root check against the allowed-jurisdiction tree | Where the holder lives |
+| Jurisdiction-Compliance | A root check against the allowed-jurisdiction tree | Where the holder lives |
 
 A single-use nullifier prevents the same wallet from being bound twice.
 The binding itself is a hidden commitment; at claim time the holder proves

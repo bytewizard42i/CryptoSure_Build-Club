@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CryptoSure Week 3 Pitch</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one reading column under a sticky two-tab header; the spoken script is set in a serif at speaking size, everything else is reference. */
+:root{
+  --bg:#f5f7fa; --surface:#ffffff; --ink:#15202d; --muted:#586576; --rule:#dae0e7;
+  --accent:#1d4ed1; --accent-soft:#e6ecfb; --built:#0f6b4f; --built-bg:#e0f3ec; --plan:#8a5a00; --plan-bg:#fbefd6;
+  --display:"Space Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --body:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --speech:"Source Serif 4",Georgia,"Times New Roman",serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e141b; --surface:#161d27; --ink:#e7ecf2; --muted:#9ba8b7; --rule:#293441;
+  --accent:#86a8ff; --accent-soft:#1b2740; --built:#6fd3b0; --built-bg:#12332a; --plan:#f0c46a; --plan-bg:#3a2c0e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e141b; --surface:#161d27; --ink:#e7ecf2; --muted:#9ba8b7; --rule:#293441;
+  --accent:#86a8ff; --accent-soft:#1b2740; --built:#6fd3b0; --built-bg:#12332a; --plan:#f0c46a; --plan-bg:#3a2c0e; color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 1rem/1.6 var(--body)}
+.wrap{max-width:60rem;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--rule)}
+header .wrap{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:.5rem 1.5rem;padding-block:1rem 0}
+.brand{padding-bottom:.75rem}
+.brand .eyebrow{font:500 .75rem/1 var(--body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.brand h1{font:600 1.375rem/1.2 var(--display);margin:.35rem 0 0;text-wrap:balance}
+nav{display:flex;gap:.25rem}
+nav button{font:500 .9375rem/1 var(--body);color:var(--muted);background:none;border:0;border-bottom:3px solid transparent;padding:.75rem .875rem;cursor:pointer}
+nav button:hover{color:var(--ink)}
+nav button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+nav button:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+main{padding-block:2rem 4rem}
+section{min-width:0;scroll-margin-top:11rem}
+section>p,section>ul,section>ol,section>h2{max-width:44rem}
+h2{font:600 1.25rem/1.25 var(--display);margin:2.75rem 0 .75rem;text-wrap:balance}
+section>h2:first-child,section>p:first-child{margin-top:0}
+p{margin:0 0 1rem}
+a{color:var(--accent);text-underline-offset:2px}
+ul,ol{margin:0 0 1rem;padding-left:1.25rem}
+li{margin-bottom:.5rem}
+li.todo{list-style:none;margin-left:-1.25rem;display:grid;grid-template-columns:1.5rem 1fr}
+.box{width:.9rem;height:.9rem;border:1.5px solid var(--muted);border-radius:3px;margin-top:.35rem}
+.meta{color:var(--muted);font-size:.875rem}
+.script{max-width:40rem;background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:1.75rem clamp(1rem,4vw,2.25rem) .75rem;font:400 1.1875rem/1.65 var(--speech)}
+.script p{margin-bottom:1.15rem}
+.tw{overflow-x:auto;margin:0 0 1.25rem;border:1px solid var(--rule);border-radius:6px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:38rem;font-size:.875rem;line-height:1.5;font-variant-numeric:tabular-nums}
+th,td{text-align:left;vertical-align:top;padding:.65rem .8rem;border-bottom:1px solid var(--rule)}
+th{font:600 .75rem/1.3 var(--body);letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:500}
+.chip{display:inline-block;font-size:.8125rem;font-weight:500;padding:.15rem .5rem;border-radius:4px}
+.chip.built{color:var(--built);background:var(--built-bg)}
+.chip.plan{color:var(--plan);background:var(--plan-bg)}
+em{color:var(--muted)}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="brand"><div class="eyebrow">CryptoSure · Build Club homework</div><h1>Week 3: Pitch Development</h1></div>
+  <nav role="tablist" aria-label="Sections">
+    <button role="tab" id="tab-pitch" aria-controls="pitch" aria-selected="true">Pitch</button>
+    <button role="tab" id="tab-market" aria-controls="market" aria-selected="false">Market analysis</button>
+  </nav>
+</div></header>
+<main class="wrap">
+<section id="pitch" role="tabpanel" aria-labelledby="tab-pitch">
+<p>Build Club week 3 homework. A three-minute spoken pitch covering the problem, who has it, what we built, and why us. The architecture diagram is cut on purpose. Speak it, do not read it.</p>
+<p>About 475 words. Timed aloud at a conversational pace this lands right around three minutes.</p>
+<h2>The script</h2><div class="script"><p>Eleven days ago, Binance lost six point three billion dollars in twenty minutes. It says it covered the loss from its own reserves. Almost nobody else in crypto could.</p><p>Crypto is a two and a half trillion dollar asset class, and about nine in ten people who hold it carry no insurance at all.</p><p>That is not because nobody sells it. Evertas, a Lloyd's coverholder, can write up to four hundred and twenty million dollars on a single policy for a custodian or exchange. AnchorWatch insures bitcoin in self-custody, up to a hundred million per customer.</p><p>So the market is not empty. It is narrow. You can get covered if you are a large custodian that opens its books to an underwriter, or a bitcoin holder who lets the insurer co-sign every transaction. A business holding its own crypto, in its own wallet, has very few places to go.</p><p>An insurer gets comfortable with a wallet in one of two ways: collect everything about the owner, or hold a key. The first builds a honeypot of identities and holdings. The second puts the insurer inside your wallet.</p><p>We are building a third way. Certify the wallet instead.</p><p>CryptoSure is defined coverage for crypto held in wallets: a periodic policy on a wallet, and point-of-use protection for a single high-value transfer, the moment most money is actually lost.</p><p>A wallet earns coverage with three certifications.</p><p>One, KYC. A trusted issuer verifies the holder is real. Identity stays sealed with that issuer, not with us.</p><p>Two, multi-sig. The wallet is controlled by a quorum, so no single stolen key can move the funds. And a covered transfer has to carry that quorum's approval.</p><p>Three, a zero-knowledge proof binds it together. The proof shows the wallet is clear of sanctions, the holder passed KYC and lives where we are licensed, and the quorum is real. It never shows who, where, or which wallet.</p><p>So a regulated institution gets KYC built in. The client keeps their confidentiality. We hold nothing that can leak, and we never hold a key.</p><p>Where are we? Our first contract, WalletBinder, is compiled on Midnight with full proving keys. Today it proves sanctions, KYC and jurisdiction on simulated data, and you can watch a planted bad address get rejected by the proof itself. Multi-sig certification is designed, and it is what we build next. This is a working proof of concept, not an insurance product. Carrier, licence and underwriting are ahead of us.</p><p>Why us? We are not trying to out-capacity Evertas. We want to be the layer that lets a carrier, a bank or a broker say yes to wallets it cannot see into today. Insurance first. Pennsylvania first. Business customers first. Love the customer, respect the risk, honor the promise.</p><p>We will do one thing, insure crypto in wallets, and do it right.</p></div><h2>Who, what, why, in one glance</h2>
+<ul>
+<li><strong>Problem:</strong> crypto insurance exists but is narrow. It reaches large custodians and insurer-co-signed bitcoin vaults, because insurers trust a wallet only by collecting the owner's data or holding a key.</li>
+<li><strong>Who has it:</strong> businesses holding their own crypto in their own wallets, first. Then custodians and exchanges below the size the big facilities serve, and self-custody individuals.</li>
+<li><strong>What we built:</strong> defined wallet and transfer coverage, earned through three certifications. WalletBinder, a compiled Compact contract, proves sanctions, KYC and jurisdiction today. Multi-sig certification is designed, not built.</li>
+<li><strong>Product-market fit:</strong> a regulated institution gets KYC, sanctions and jurisdiction assurance built in; the client keeps identity and holdings confidential; covered transfers are secured by a quorum. Untested with carriers or customers. See the <a href="#market" data-tab="market">market analysis</a>.</li>
+<li><strong>Why us:</strong> insurance-first discipline, certification instead of collection or co-signing, and a Pennsylvania-first carrier-backed path that complements existing capacity instead of competing with it.</li>
+</ul>
+<h2>The three certifications</h2>
+<p>Each certification answers one underwriting question, and only the first and third exist in WalletBinder today.</p>
+<div class='tw'><table>
+<thead>
+<tr>
+<th>Certification</th>
+<th>Question it answers</th>
+<th>Who attests</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KYC</td>
+<td>Is there a real, verified person or company behind this wallet?</td>
+<td>A trusted third-party issuer; identity stays with them</td>
+<td><span class="chip built">In WalletBinder, on simulated data</span></td>
+</tr>
+<tr>
+<td>Multi-sig, wallet</td>
+<td>Can one stolen key move the funds?</td>
+<td>The wallet's own on-chain quorum configuration</td>
+<td><span class="chip plan">Designed, not built</span></td>
+</tr>
+<tr>
+<td>Multi-sig, transaction</td>
+<td>Did the quorum approve this specific covered transfer?</td>
+<td>The signatures on the transfer</td>
+<td><span class="chip plan">Designed, not built</span></td>
+</tr>
+<tr>
+<td>Zero-knowledge proof</td>
+<td>Can all of the above, plus sanctions and jurisdiction, be verified without disclosing who, where or which wallet?</td>
+<td>The proof itself, checked on Midnight</td>
+<td><span class="chip built">Sanctions, KYC and jurisdiction compiled with full proving keys</span></td>
+</tr>
+</tbody>
+</table></div>
+<p>Background only, not for the pitch: Midnight's mainnet launched in a federated model in 2026 and is built for this pattern of proving compliance without publishing identity (<a target="_blank" rel="noopener" href="https://docs.midnight.network/learn">Midnight docs</a>).</p>
+<h2>What changed after practice</h2>
+<p>Pending. This line will be filled in after the pitch is delivered to someone outside the team, with the actual observation and the actual edit. It will not be invented in advance.</p>
+<h2>Delivery notes</h2>
+<ul>
+<li>The hook is the Binance number, then the turn: coverage exists, and it is narrow. Update "eleven days ago" to the real gap on the day you speak. Drop the Binance open entirely once it is more than a few weeks old.</li>
+<li>Name Evertas and AnchorWatch with respect. The room trusts a founder who knows the incumbents.</li>
+<li>Say "zero-knowledge proof" once, then just say "the proof."</li>
+<li>Do not describe contract internals, Merkle trees, circuits, signature schemes or issuers beyond what the script says. That is the architecture diagram sneaking back in.</li>
+<li>Never imply a carrier has agreed, a licence is held, coverage is for sale today, or that multi-sig certification is built.</li>
+<li>Never imply Evertas, AnchorWatch or any named firm is a partner or has seen this.</li>
+</ul>
+<p>Three questions to expect:</p>
+<ol>
+<li><strong>"Bybit was multi-sig and still lost $1.5B."</strong> True. Its signers approved a transaction a compromised interface misrepresented. Multi-sig stops a single stolen key; it does not stop a quorum signing the wrong thing. That is why the transaction certification matters, and why multi-sig is one of three checks and not the product.</li>
+<li><strong>"AnchorWatch says its co-signature is what makes the risk underwritable. Why would a carrier accept less?"</strong> Honest answer: we do not know yet that one will. It is the first thing to test in carrier conversations.</li>
+<li><strong>"Why not just buy from Evertas?"</strong> If you are a large custodian with a broker, you should. We are aimed at the wallet they are not built to serve.</li>
+</ol>
+<h2>Open assumptions</h2>
+<p>Each of these changes the script if wrong.</p>
+<ul>
+<li class='todo'><span class='box' aria-hidden='true'></span><strong>Multi-sig is not yet in WalletBinder.</strong> The contract covers sanctions, KYC and jurisdiction, so the script says multi-sig is "designed, and what we build next."</li>
+<li class='todo'><span class='box' aria-hidden='true'></span><strong>"Multi-sig certification" means two things:</strong> the wallet is quorum-controlled, and each covered transfer carries the quorum's approval. If CryptoSure or a carrier is meant to act as a signer, the positioning against AnchorWatch reverses.</li>
+<li class='todo'><span class='box' aria-hidden='true'></span><strong>CryptoSure never holds a key.</strong> This is the sharpest line of difference in the script.</li>
+<li class='todo'><span class='box' aria-hidden='true'></span><strong>Business self-custody is the lead segment,</strong> ahead of custodians and exchanges, because that is where Evertas and the Marsh facility are strongest.</li>
+</ul>
+<h2>Sources this pitch draws on</h2>
+<ul>
+<li><a href="./week-02-problem-and-solution.md">Week 2: Problem and Solution</a></li>
+<li><a href="#market" data-tab="market">Week 3: Market Analysis</a>, which carries the external sources for every figure in the script</li>
+<li><a href="../pitch-resources/README.md">Pitch resources</a></li>
+<li><a href="../../contracts/WalletBinder.compact">WalletBinder contract</a></li>
+</ul>
+<p><em>Not an offer of insurance. CryptoSure is a pre-licensing company building a
+proof of concept.</em></p></section>
+<section id="market" role="tabpanel" aria-labelledby="tab-market" hidden>
+<p>Companion to the <a href="#pitch" data-tab="pitch">Week 3 pitch</a>. Figures as of November 9, 2026.</p>
+<p>The reachable market is business self-custody in multi-sig wallets. About $35B sits in Safe accounts alone, which at today's observed premium rates is roughly $190M to $350M of annual premium if all of it were insured. No competitor we found verifies eligibility without collecting identity. Product-market fit is still a hypothesis: no carrier and no customer has tested it.</p>
+<h2>Product-market fit</h2>
+<p><strong>A regulated institution gets KYC, sanctions and jurisdiction assurance built in. Its client keeps identity and holdings confidential. Covered transfers are secured by a multi-sig quorum the policy can verify.</strong></p>
+<p>The fit has two sides, and both have to say yes.</p>
+<div class='tw'><table>
+<thead>
+<tr>
+<th>Side</th>
+<th>Their problem today</th>
+<th>What CryptoSure gives them</th>
+<th>Evidence the problem is real</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Regulated institutions: carriers, MGAs, brokers, banks, custodians</td>
+<td>They cannot serve a wallet without knowing the customer, and holding that data makes them a target</td>
+<td>Proof that a wallet is sanctions-clear, KYC-verified, in a licensed jurisdiction and quorum-controlled, with no identity file to store</td>
+<td>47% of surveyed bank and payments staff cite running afoul of regulators as a crypto risk, about 70% cite fraud, and half are building in-house KYC teams (<a target="_blank" rel="noopener" href="https://www.americanbanker.com/payments/news/exclusive-research-five-bank-challenges-when-considering-crypto">American Banker, 2025</a>). 85 of 117 jurisdictions have passed or are passing travel rule laws (<a target="_blank" rel="noopener" href="https://alphapoint.com/blog/kyc-compliance-in-crypto-a-2026-operational-playbook-for-banks-and-psps">AlphaPoint</a>)</td>
+</tr>
+<tr>
+<td>Businesses holding their own crypto</td>
+<td>Cover means opening the books to an underwriter or giving the insurer a key</td>
+<td>Coverage that leaves identity with the KYC issuer and every key with the business</td>
+<td>About 11% of holders are insured; 42% of the uninsured say they would buy and another 26% would consider it (<a target="_blank" rel="noopener" href="https://riskandinsurance.com/crypto-insurance-gap-reveals-3-31-trillion-market-opportunity/">AM Best via Risk &amp; Insurance</a>)</td>
+</tr>
+</tbody>
+</table></div>
+<p>Why now: Binance lost about $6.3B on October 29, 2026. Carriers are writing key, custody and people risk and favor controls they can verify (<a target="_blank" rel="noopener" href="https://riskandinsurance.com/the-steady-advance-of-cryptocurrency-insurance/">Risk &amp; Insurance, November 2026</a>). Midnight's mainnet went live in 2026.</p>
+<p>Beachhead: US businesses holding roughly $1M to $50M in multi-sig wallets on chains other than bitcoin. AnchorWatch covers bitcoin only. Evertas sells through brokers to institutions.</p>
+<p>What would prove the fit:</p>
+<ul>
+<li class='todo'><span class='box' aria-hidden='true'></span>A carrier or MGA says in writing that it would accept a zero-knowledge attestation in place of holding KYC data.</li>
+<li class='todo'><span class='box' aria-hidden='true'></span>A carrier accepts certified multi-sig without being a co-signer. AnchorWatch says its co-signature is what makes the risk underwritable.</li>
+<li class='todo'><span class='box' aria-hidden='true'></span>Ten businesses with multi-sig treasuries say what they would pay, as a percent of insured value.</li>
+<li class='todo'><span class='box' aria-hidden='true'></span>A KYC issuer agrees to issue the credential and to be the party that answers a warrant.</li>
+</ul>
+<p><strong>A stronger path to consider.</strong> The certification may be a product before the insurance is. Selling wallet and transfer attestations to banks, brokers and existing crypto insurers needs no carrier and may need no insurance licence, so it could earn revenue while licensing and carrier talks run. It would also make Evertas-type firms customers, not competitors. This is a suggestion, not something in the current plan, and the licensing point needs counsel.</p>
+<h2>Market size</h2>
+<p>Published estimates of the 2026 crypto insurance market differ by about 35 times, so they define the market differently and none should be quoted as the number.</p>
+<div class='tw'><table>
+<thead>
+<tr>
+<th>Source</th>
+<th>2026 estimate</th>
+<th>Forecast</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mordor Intelligence</td>
+<td>$0.39B</td>
+<td>$1.17B by 2031</td>
+</tr>
+<tr>
+<td>Stratistics MRC</td>
+<td>$2.16B</td>
+<td>$16.71B by 2034</td>
+</tr>
+<tr>
+<td>The Business Research Company</td>
+<td>$5.01B</td>
+<td>$18.13B by 2030</td>
+</tr>
+<tr>
+<td>Grand View Research</td>
+<td>$13.8B</td>
+<td>$192.7B by 2033</td>
+</tr>
+</tbody>
+</table></div>
+<p>Only the Grand View figure was read in a source we opened (<a target="_blank" rel="noopener" href="https://riskandinsurance.com/the-steady-advance-of-cryptocurrency-insurance/">Risk &amp; Insurance</a>). The other three come from search listings of the publishers' report pages.</p>
+<p>A bottom-up view is more useful. Premium is assets times rate, and the two rates below are the low end observed in the market.</p>
+<div class='tw'><table>
+<thead>
+<tr>
+<th>Asset pool</th>
+<th>Assets</th>
+<th>Premium at 0.55%</th>
+<th>Premium at 1.0%</th>
+<th>Caveat</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Safe multi-sig accounts</td>
+<td>$35.25B at end of Q1 2026 (<a target="_blank" rel="noopener" href="https://safefoundation.org/blog/safe-q1-2026-quarterly-report">Safe Foundation</a>)</td>
+<td>$194M</td>
+<td>$353M</td>
+<td>Includes DAOs, protocols and exchanges. Not all are US businesses</td>
+</tr>
+<tr>
+<td>Bitcoin held by seven large public filers</td>
+<td>968,788 BTC, about $76B at $78,428 (<a target="_blank" rel="noopener" href="https://coinlaw.io/bitcoin-treasury-companies-statistics/">CoinLaw</a>)</td>
+<td>$418M</td>
+<td>$760M</td>
+<td>Custody is undisclosed and much is likely with custodians, so this is a ceiling. Do not add it to the Safe row</td>
+</tr>
+</tbody>
+</table></div>
+<p>If Safe-held assets reached the 11% insured share that holders have today, premium would be about $21M to $39M a year. That is the realistic near-term pool, and it is small.</p>
+<h2>Competitor models and what they earn</h2>
+<p>No regulated competitor publishes premium or revenue. What is public is funding, pricing and scale.</p>
+<div class='tw'><table>
+<thead>
+<tr>
+<th>Company</th>
+<th>Model</th>
+<th>How it earns</th>
+<th>Disclosed numbers</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a target="_blank" rel="noopener" href="https://insurancebusinessmag.com/us/news/cyber/evertas-closes-14-million-series-a-funding-round-430427.aspx">Evertas</a></td>
+<td>Underwriter and Lloyd's coverholder writing on others' capacity, sold through brokers</td>
+<td>Share of premium on policies it binds. Rate not disclosed</td>
+<td>$19.8M raised: $14M Series A in December 2022 led by Polychain, plus a $5.8M seed. Limits up to $420M per policy</td>
+</tr>
+<tr>
+<td>AnchorWatch</td>
+<td>Coverholder that also runs the multi-sig vault and co-signs</td>
+<td>Premium from 0.55% of insured bitcoin a year, on $250K to $100M (<a target="_blank" rel="noopener" href="https://bitcoinmagazine.com/business/protect-your-bitcoin-and-yourself-with-anchorwatch">Bitcoin Magazine</a>)</td>
+<td>$3M seed in September 2023 led by Ten31 (<a target="_blank" rel="noopener" href="https://nobsbitcoin.com/anchorwatch-raises-3m-funding-round-led-by-ten31">No Bullshit Bitcoin</a>). A $10M policy is about $55K a year</td>
+</tr>
+<tr>
+<td>Coincover</td>
+<td>Protection technology with Lloyd's-backed cover, sold through wallet providers</td>
+<td>Fees from business partners</td>
+<td>$30M Series B led by Foundation Capital, 300+ business customers (<a target="_blank" rel="noopener" href="https://coverager.com/coincover-raises-30-million/">Coverager</a>). About $300M protected across 15,000+ wallets (<a target="_blank" rel="noopener" href="https://www.spark.money/tools/crypto-insurance-provider-comparison">Spark</a>)</td>
+</tr>
+<tr>
+<td>Relm</td>
+<td>Risk-bearing Bermuda insurer</td>
+<td>Underwriting profit and investment income</td>
+<td>Net admitted assets of $213M in December 2025, up from $57.2M in 2021 (<a target="_blank" rel="noopener" href="https://relminsurance.com/our-journey/">Relm</a>). Premium not disclosed</td>
+</tr>
+<tr>
+<td>Nexus Mutual</td>
+<td>Member-owned on-chain mutual</td>
+<td>Cover fees</td>
+<td>$5.7M of cover fees in 2025 on about $194M of active cover, roughly 2.9%. $18.5M of claims paid through 2025 (<a target="_blank" rel="noopener" href="https://www.spark.money/tools/crypto-insurance-provider-comparison">Spark</a>)</td>
+</tr>
+<tr>
+<td>Marsh</td>
+<td>Broker-arranged Lloyd's facility</td>
+<td>Brokerage</td>
+<td>$825M of capacity for custodians (<a target="_blank" rel="noopener" href="https://www.spark.money/tools/crypto-insurance-provider-comparison">Spark</a>)</td>
+</tr>
+</tbody>
+</table></div>
+<p>CryptoSure's planned shape is closest to Evertas and AnchorWatch: a managing general agent (MGA) on a carrier's paper. A 2022 McKinsey review gives the benchmark for that model: commissions are 60% to 80% of MGA revenue, profit-linked payments 20% to 30%, and EBITDA margins run in the high 20s to low 30s percent. About 600 US MGAs wrote $47B of premium. The biggest risk it names is losing the carrier relationship (<a target="_blank" rel="noopener" href="https://karriere.mckinsey.de/industries/financial-services/our-insights/insurance-mgas-opportunities-and-considerations-for-investors">McKinsey</a>).</p>
+<h2>Pricing and loss benchmarks</h2>
+<p>Premium rates in the market today:</p>
+<div class='tw'><table>
+<thead>
+<tr>
+<th>Cover</th>
+<th>Annual rate</th>
+<th>Source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bitcoin in an insurer-co-signed multi-sig vault</td>
+<td>From 0.55%</td>
+<td>AnchorWatch, via Bitcoin Magazine</td>
+</tr>
+<tr>
+<td>Institutional custody</td>
+<td>1% to 2.5% typical, 1% to 5% range</td>
+<td>Spark, a secondary source</td>
+</tr>
+<tr>
+<td>On-chain mutual cover</td>
+<td>About 2.9% blended</td>
+<td>Nexus Mutual, calculated above</td>
+</tr>
+</tbody>
+</table></div>
+<p>Exchange hack premiums rose about 35% year on year in early 2025 (Spark).</p>
+<p>Losses the premium has to pay for (<a target="_blank" rel="noopener" href="https://www.privacyaffairs.com/cryptocurrency-scams-2026/">Privacy Affairs</a>, compiling the firms named):</p>
+<ul>
+<li>2025: $2.9B to $3.4B stolen, depending on the source (TRM Labs, CertiK, Chainalysis).</li>
+<li>2026 to November 4: $8.7B including Binance (TRM Labs).</li>
+<li>Personal wallets in 2025: $713M across 158,000 incidents (Chainalysis).</li>
+<li>First half of 2026: $444.5M from wallet compromises and $366.3M from phishing (CertiK).</li>
+</ul>
+<p>A crude check: $3.4B stolen in 2025 against a $2.99T market at year end is about 0.11% of assets. The 2026 figure is about 0.33% with Binance and 0.09% without it. Rates of 0.55% and up sit well above the average loss, and one event tripled the year. Thefts concentrate in exchanges and hot wallets, so this is not an actuarial rate for multi-sig business wallets. Pricing that needs a carrier's actuary.</p>
+<h2>Costs</h2>
+<p>The checks themselves are cheap. The audit and the people are not.</p>
+<div class='tw'><table>
+<thead>
+<tr>
+<th>Cost</th>
+<th>Benchmark</th>
+<th>Note</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>KYC per individual</td>
+<td>$0.33 to $1.89 for a full bundle (<a target="_blank" rel="noopener" href="https://www.signzy.com/blogs/kyc-pricing-us-cost-per-verification">Signzy</a>)</td>
+<td>Business verification (KYB) is quote-only, and business customers are the lead segment</td>
+</tr>
+<tr>
+<td>Sanctions and AML screening</td>
+<td>$0.04 to $0.50 add-on per check (Signzy)</td>
+<td>WalletBinder also needs an on-chain screening source</td>
+</tr>
+<tr>
+<td>Contract audit</td>
+<td>$40K to $100K for mid-complexity; zero-knowledge circuits run 80% to 120% higher (<a target="_blank" rel="noopener" href="https://sherlock.xyz/post/smart-contract-audit-pricing-a-market-reference-for-2026">Sherlock</a>)</td>
+<td>Implies about $72K to $220K. Each re-audit $5K to $20K</td>
+</tr>
+<tr>
+<td>Fronting fee</td>
+<td>6% to 10% of written premium (<a target="_blank" rel="noopener" href="https://lionspecialty.kit.com/posts/a-fronting-fee-that-pays-in-every-market-authority-a-carrier-can-pull-at-renewal-and-a-profit-commission-that-vanishes">Lion Specialty</a>)</td>
+<td>Applies if a fronting carrier issues the paper</td>
+</tr>
+<tr>
+<td>Pennsylvania licences</td>
+<td>Resident producer $55, surplus lines producer $200, every two years (<a target="_blank" rel="noopener" href="https://agentsync.io/compliance-library/jurisdictions/pennsylvania">AgentSync</a>)</td>
+<td>Surplus lines premium tax is 3%. The MGA licence fee was not found</td>
+</tr>
+</tbody>
+</table></div>
+<p>Not yet costed, and likely the largest items: insurance counsel, errors and omissions cover, underwriting and claims staff, carrier due diligence, and any collateral a carrier requires.</p>
+<h2>Illustrative earnings</h2>
+<p>Not a forecast. This shows what the MGA model yields at different sizes, using a 0.75% premium rate, between AnchorWatch's floor and the low end of institutional pricing. The commission range of 15% to 25% is an assumption: no source we opened states a rate, and the carrier sets it.</p>
+<div class='tw'><table>
+<thead>
+<tr>
+<th>Insured value</th>
+<th>Share of Safe-held assets</th>
+<th>Annual premium</th>
+<th>Revenue at 15%</th>
+<th>Revenue at 25%</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>$250M</td>
+<td>0.7%</td>
+<td>$1.9M</td>
+<td>$0.28M</td>
+<td>$0.47M</td>
+</tr>
+<tr>
+<td>$1B</td>
+<td>2.8%</td>
+<td>$7.5M</td>
+<td>$1.1M</td>
+<td>$1.9M</td>
+</tr>
+<tr>
+<td>$5B</td>
+<td>14.2%</td>
+<td>$37.5M</td>
+<td>$5.6M</td>
+<td>$9.4M</td>
+</tr>
+</tbody>
+</table></div>
+<p>Excludes single-transfer cover, profit commission and any certification fees, and is before the costs above.</p>
+<p>The table says the commission-only model is thin until insured value is in the billions. That is the case for pricing single-transfer cover separately and for testing certification fees early.</p>
+<h2>Open questions</h2>
+<ul>
+<li>What commission and profit share will a carrier offer a new MGA in this class?</li>
+<li>Does selling attestations without insurance need a licence in Pennsylvania?</li>
+<li>What does KYB cost per business, and who pays, the insured or CryptoSure?</li>
+<li>What loss history exists for multi-sig business wallets specifically?</li>
+<li>How is single-transfer cover priced? Nothing comparable was found.</li>
+</ul>
+<h2>Sources</h2>
+<p>Opened for this analysis: every link above, plus <a target="_blank" rel="noopener" href="https://evertas.com/news/">Evertas news</a>, the <a target="_blank" rel="noopener" href="https://www.nobsbitcoin.com/anchorwatch-launches-in-the-u-s-for-customers-holding-between-250k-100m-in-bitcoin/">AnchorWatch US launch</a>, <a target="_blank" rel="noopener" href="https://coinstats.app/news/af38702d41e3e3eed34f0aa22e5937ff8d5ff0d6f52ca76c11d8d960dff5cf17_Why-Is-Crypto-Crashing-in-2026-Real-Reasons-and-Will-It-Recover/">CoinStats market data</a> and the <a target="_blank" rel="noopener" href="https://docs.midnight.network/learn">Midnight docs</a>.</p>
+<p>Secondary sources to verify before quoting outside the team: Spark, Privacy Affairs, CoinLaw, Signzy and Sherlock compile or sell in the areas they report on. The Bybit multi-sig account in the pitch's delivery notes comes from search results (<a target="_blank" rel="noopener" href="https://www.theblock.co/post/342791/largest-crypto-exchange-hack-what-ethereum-security-experts-know-lazarus-bybit/">The Block</a>), not an opened page.</p>
+<p><em>Not an offer of insurance. CryptoSure is a pre-licensing company building a proof of concept.</em></p></section>
+</main>
+<script>
+(function(){
+  var names=['pitch','market'];
+  function show(n,push){
+    if(names.indexOf(n)<0)n='pitch';
+    names.forEach(function(k){
+      document.getElementById(k).hidden=(k!==n);
+      document.getElementById('tab-'+k).setAttribute('aria-selected',String(k===n));
+    });
+    if(push&&location.hash!=='#'+n){history.replaceState(null,'','#'+n)}
+    window.scrollTo(0,0);
+  }
+  names.forEach(function(k){document.getElementById('tab-'+k).addEventListener('click',function(){show(k,true)})});
+  document.addEventListener('click',function(e){var a=e.target.closest('a[data-tab]');if(a){e.preventDefault();show(a.getAttribute('data-tab'),true)}});
+  window.addEventListener('hashchange',function(){show(location.hash.slice(1),false)});
+  show(location.hash.slice(1),false);
+  window.addEventListener('load',function(){window.scrollTo(0,0)});
+})();
+</script>
+</body>
+</html>
