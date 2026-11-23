@@ -9,7 +9,7 @@ told insurance finally exists for it.
 
 | Channel | Why this one | Cost |
 |---|---|---|
-| **1. Midnight community (Discord, ambassadors, Build Club)** | I'm an ambassador — this is a warm room, not a cold one. These users already understand zero-knowledge proofs, so "insurance that never sees your identity" lands in one sentence instead of needing a whitepaper. First 100 users should be people who get it immediately. | ~$0. Time only — a few hours a week in Discord, one demo at a community call. |
+| **1. Midnight community (Discord, ambassadors, Build Club)** | I've been in the Midnight ecosystem since before Build Club or NIGHTFORCE existed — I'm an ambassador with established trust here, not a newcomer asking for attention. These users already understand zero-knowledge proofs, so "insurance that never sees your identity" lands in one sentence instead of needing a whitepaper. First 100 users should be people who get it immediately. | ~$0. Time only — a few hours a week in Discord, one demo at a community call. |
 | **2. Self-custody wallet & custody partners** | They already have exactly our users. A wallet provider that can say "you can insure what's on this device" gets a feature; we get distribution to users at the moment they're thinking about protecting what they hold. | ~$0 cash. Integration/BD time, plus a referral share of premium if a deal lands — deferred cost, not upfront. |
 
 ## Why not the others
