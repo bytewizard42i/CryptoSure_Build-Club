@@ -57,6 +57,10 @@ black box: we consume its output and never look inside.
 > opaque binary JavaScript modules — a public interface wrapped around a
 > sealed implementation, so integrators can call them without being able
 > to read their internals.
+>
+> The linked repositories are private, proprietary external protocols
+> with limited access; a 404 from those links means the repo is
+> restricted, not that it doesn't exist.
 
 **KYCz** ([repo — private](https://github.com/bytewizard42i/KYCz_us_app)),
 our privacy-preserving KYC component. A trusted
