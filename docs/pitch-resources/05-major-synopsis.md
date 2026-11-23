@@ -126,7 +126,8 @@ Three instruments feed the WalletBinder, and all three are outside the
 scope of this Build Club project. CryptoSure treats each as a sealed black
 box: we consume its output and never look inside.
 
-**KYCz**, our privacy-preserving KYC protocol. A trusted issuer runs full
+**KYCz** (planned component — represented here by test fixtures), our
+privacy-preserving KYC module. A trusted issuer runs full
 KYC on the potential insured and enters everything it collected into KYCz.
 The issuer certifies the contents are correct and sufficient for the
 applicable standard, then seals the box. What CryptoSure receives is the
@@ -137,7 +138,8 @@ warrant is served on the issuer, who opens the box and releases the identity
 behind the wallet. Absent a warrant, all CryptoSure learns is what the proof
 says: this wallet's holder qualifies at the required level.
 
-**GeoZ**, our privacy-preserving location oracle. Same arrangement for
+**GeoZ** (planned component — same fixture status), our
+privacy-preserving location module. Same arrangement for
 jurisdiction. A trusted issuer attests the region, GeoZ seals it, and the
 proof tells us only that the holder is inside a licensed jurisdiction.
 
@@ -232,8 +234,8 @@ docs/pitch-resources/                  this folder
 media/cryptosure-architecture-v2_0.png the architecture diagram
 ```
 
-Integration specifications for KYCz and GeoZ live in their own repositories
-under `docs/integrations/cryptosure/`.
+KYCz and GeoZ are planned opaque binary JavaScript modules. Their
+integration interfaces will be published when the modules ship.
 
 ## 12. People
 

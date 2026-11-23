@@ -46,14 +46,20 @@ The binding itself is a hidden commitment; at claim time the holder proves
 it. Denylists churn (entries get added and delisted), so every clearance
 carries a list version and the contract enforces a freshness floor.
 
-### The black boxes: KYCz, GeoZ, and the ZK proof
+### The black boxes: identity, location, and the ZK proof
 
 Three instruments feed the WalletBinder, and all three are **outside the
 scope of this Build Club project**. CryptoSure treats each as a sealed
 black box: we consume its output and never look inside.
 
-**KYCz** ([repo](https://github.com/bytewizard42i/KYCz_us_app)), our
-privacy-preserving KYC protocol. A trusted
+> **Status: placeholders.** KYCz and GeoZ exist in this repo only as
+> interfaces and test fixtures. The intent is to deliver them later as
+> opaque binary JavaScript modules — a public interface wrapped around a
+> sealed implementation, so integrators can call them without being able
+> to read their internals.
+
+**KYCz** ([repo — private](https://github.com/bytewizard42i/KYCz_us_app)),
+our privacy-preserving KYC component. A trusted
 issuer (an exchange, a government provider, or a licensed KYC vendor) runs
 full KYC on the potential insured and enters everything it collected into
 the KYCz protocol. The issuer certifies that the contents are correct and
@@ -67,8 +73,8 @@ all CryptoSure ever learns is what the ZK proof tells us: once we have
 verified the proof is authentic, this wallet's holder qualifies for KYC
 at the required level, and we need to know nothing else about them.
 
-**GeoZ** ([repo](https://github.com/bytewizard42i/GeoZ)), our
-privacy-preserving location oracle. Same setup for location. A trusted issuer attests the holder's region, GeoZ seals it,
+**GeoZ** ([repo — private](https://github.com/bytewizard42i/GeoZ_us_app_Midnight-Oracle)),
+our privacy-preserving location component. Same setup for location. A trusted issuer attests the holder's region, GeoZ seals it,
 and the proof tells us only that the holder is inside a jurisdiction the
 program is licensed for. Where in that jurisdiction, we never learn.
 
@@ -83,8 +89,9 @@ OFAC (the United States Treasury's Office of Foreign Assets Control) and
 the consolidated sanctions lists of the European Union, the United
 Kingdom, and the United Nations). Together these are the whole gate. KYC qualified, in-jurisdiction,
 not on a denylist, proven in zero knowledge, with lawful access preserved
-through the issuer. Integration specs live in the KYCz and GeoZ repos
-under `docs/integrations/cryptosure/`.
+through the issuer. Integration interfaces for KYCz and GeoZ will be
+published when the modules ship; until then they are represented here by
+test fixtures only.
 
 Roles are explicit: an **issuer** (exchange, government provider, or
 licensed KYC vendor) inserts credential commitments; a **screener** inserts

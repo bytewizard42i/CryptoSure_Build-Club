@@ -52,8 +52,9 @@ carries a list version and the contract enforces a freshness floor.
 
 ## The black boxes
 
-KYCz (privacy-preserving identity), GeoZ (privacy-preserving location), and
-the ZK proof itself are sealed black boxes to CryptoSure. A trusted issuer,
+KYCz (privacy-preserving identity) and GeoZ (privacy-preserving location)
+are planned components — placeholders here, intended as opaque binary JS
+modules — and the ZK proof itself is a sealed black box to CryptoSure. A trusted issuer,
 an exchange or a government provider, verifies the person, certifies the
 record, seals it, and keeps the key. CryptoSure receives a commitment it can
 verify but cannot open. If a warrant is issued it is served on the issuer,
@@ -68,8 +69,8 @@ The contract is real and compiles. The demo feeds it simulated identity and
 sanctions data, including a fixture of twenty fictional addresses with half
 planted on a mock denylist, so a reviewer can watch a bad address get
 rejected by the proof. Nothing in the contracts changes when real feeds
-replace the fixtures. KYCz and GeoZ are consumed, not built, inside this
-project. No policy has been sold; nothing here is a solicitation.
+replace the fixtures. KYCz and GeoZ are placeholders consumed through
+fixtures, not built inside this project. No policy has been sold; nothing here is a solicitation.
 
 ## The path
 
