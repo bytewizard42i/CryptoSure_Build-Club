@@ -106,36 +106,109 @@ else.
 
 ### Status of the contract
 
-- Compiles under Compact 0.35.0 (language 0.27) with full proving keys,
-  18 circuits. The contract is written as production logic, not a sketch.
+- Compiles under the Compact toolchain 0.36.1 (language 0.28, the ledger 9
+  line) with full proving keys, 18 circuits. The contract is written as
+  production logic, not a sketch.
 - Honest boundary: list-based sanctions screening requires the screener to
   see the address it screens, exactly as every compliance vendor does
   today. Midnight's contribution is that the result reaches the chain as a
   hidden leaf and the holder proves clearance without revealing which
   address was cleared.
-- Cross-contract calls are not yet available on Midnight, so the three
-  checks live in one contract on purpose. No off-chain attestor bridges
-  them; the gate is atomic.
+- The three checks live in one contract on purpose: a single proof
+  enforces the whole gate atomically, and no off-chain attestor bridges
+  separate contracts.
+- Not yet deployed to a public network. The flow below runs the compiled
+  contract locally.
 
-### The demo
+### The binding flow (runnable)
 
-The KYC provider and the sanctions feeds are **simulated** in the demo.
-`demo/mock-screening-fixture.json` holds twenty fictional wallet addresses,
-half of them planted on a mock denylist with fictional attributions. The
-demo app lets you pick one and try to bind it. A clean address passes the
-gate. A planted one is rejected by the proof, and only then does the demo
-tell you why: you cannot tell a banned address by looking at it, which is
-the whole reason the check exists.
+![Binding an insurance policy to one wallet: off-chain checks on the left, one on-chain binding on the right](media/wallet-binding-slide.png)
 
-The contract does not know or care that the data is simulated. Swap the
-mock provider for a real KYC issuer and a live denylist feed and the same
-circuits run unchanged.
+An applicant chooses one of five wallet-cover policies. Each has its own
+prerequisites, and larger cover asks for more:
+
+| Policy | Cover limit | KYC level | CryptoSureEdu modules | Pass mark |
+|---|---|---|---|---|
+| `CS-WALLET-500` | $500 | 1 | 2 | 70% |
+| `CS-WALLET-1000` | $1,000 | 1 | 3 | 70% |
+| `CS-WALLET-2500` | $2,500 | 2 | 4 | 80% |
+| `CS-WALLET-5000` | $5,000 | 2 | 5 | 80% |
+| `CS-WALLET-10000` | $10,000 | 2 | 6 | 90% |
+
+Limits are the product tiers; premiums, deductibles, module lists and pass
+marks in `policies/policy-catalog.json` are placeholders.
+
+One command walks eleven synthetic applicants through the whole flow:
+
+1. validate the user (KYCz, GeoZ)
+2. prove they hold the wallet
+3. validate the wallet
+4. pass the CryptoSureEdu test for the chosen policy
+5. sign, with the insured wallet, that they understand the agreement
+6. bind the policy
+7. prove the binding
+
+The on-chain policy reference is the hash of the completed private
+agreement: the terms, the education certificate, and the signed
+acknowledgment.
+
+```bash
+npm install
+npm run compile:fast   # compile WalletBinder (skips proving keys; `npm run compile` builds them)
+npm run demo           # run every persona through the flow
+npm test               # 47 tests, including the contract refusing each bad case on its own
+```
+
+What is real and what is simulated:
+
+| Piece | State |
+|---|---|
+| `WalletBinder` contract logic | **Real.** The compiled contract runs locally and every `assert` is enforced. |
+| Network, ZK proof generation | **Not exercised.** No transaction is submitted and no proof is generated; the local run answers "does the contract accept this?" |
+| KYCz and GeoZ | **External black boxes, test-wired.** They live in their own private repositories and are called over HTTP. For now they return synthetic answers for fictional personas. This repo contains no oracle logic, only the clients in `oracles/`. |
+| Wallet screening | **Simulated.** `demo/mock-screening-fixture.json`: twenty fictional addresses, half planted on a mock denylist. |
+| Wallet-control check | **Simulated.** A signed challenge using stand-in keys; a real integration verifies the wallet's native signature. |
+| CryptoSureEdu test | **Demo content, graded off-chain.** Placeholder questions with a public answer key; the certificate is not yet an on-chain credential. |
+| Signed acknowledgment | **Simulated keys**, same as the wallet-control check. Verified off-chain. |
+| Policy documents | **Fictional**, and never on-chain. Only the hash of the completed agreement is. |
+
+When KYCz or GeoZ refuses an applicant, CryptoSure receives a yes/no and an
+opaque reference id. The reason stays inside the oracle. Running the demo
+needs both oracle repositories checked out next to this one (see
+`oracles/oracle-endpoints.json`); without them the oracle-dependent tests
+skip and the contract-only tests still run.
+
+The contract does not know or care that the inputs are simulated. Swap in a
+real KYC issuer, a real region attestor and a live denylist feed and the
+same circuits run unchanged.
 
 ## Repository layout
 
 ```
 contracts/
   WalletBinder.compact        the eligibility gate (compiles, full ZK keys)
+oracles/
+  oracle-endpoints.json       where the external KYCz / GeoZ black boxes live
+  kycz-client.mjs             asks KYCz: is this person verified?
+  geoz-client.mjs             asks GeoZ: are they in a licensed region?
+  wallet-screening.mjs        CryptoSure's own denylist check (simulated feed)
+policies/
+  policy-catalog.json         the five policies and their prerequisites
+edu/
+  cryptosure-edu.mjs          builds and grades the test for a policy
+  question-bank.json          demo questions, three per module
+sandwich/
+  bind-policy.mjs             the seven-step binding flow
+  acknowledgment.mjs          wallet-signed "I understand this agreement"
+  chain.mjs                   runs the compiled contract locally
+  encoding.mjs                hashes and commitments shared with the contract
+  wallet-control.mjs          signed-challenge wallet ownership check
+  personas.json               synthetic applicants
+  run-demo.mjs                `npm run demo`
+scripts/
+  oracle-processes.mjs        starts the oracles from their own repos
+tests/
+  sandwich.test.mjs           persona matrix, all five policies, contract-level enforcement, edu + acknowledgment
 demo/
   mock-screening-fixture.json simulated addresses + mock KYC provider shape
 docs/pitch-resources/         one-liner, elevator pitch, paragraph, synopsis, major synopsis

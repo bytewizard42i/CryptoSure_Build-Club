@@ -1,0 +1,25 @@
+{
+  "_comment": "Where the external black-box oracles live. CryptoSure does not contain their logic; it calls them. Both are separate, proprietary repositories with limited access, and both are TEST-WIRED ONLY for now (synthetic answers, no real verification). localPath is where the repo sits next to this one in a local checkout; url can be overridden with the environment variable named in urlEnvVar.",
+  "kycz": {
+    "repository": "https://github.com/bytewizard42i/KYCz_us_app",
+    "access": "private",
+    "status": "test-wired",
+    "localPath": "../KYCz",
+    "serverEntry": "src/oracle/server.mjs",
+    "portEnvVar": "KYCZ_ORACLE_PORT",
+    "urlEnvVar": "KYCZ_ORACLE_URL",
+    "defaultUrl": "http://127.0.0.1:4101",
+    "route": "/v1/cryptosure/credential"
+  },
+  "geoz": {
+    "repository": "https://github.com/bytewizard42i/GeoZ_us_app_Midnight-Oracle",
+    "access": "private",
+    "status": "test-wired",
+    "localPath": "../GeoZ",
+    "serverEntry": "src/oracle/server.mjs",
+    "portEnvVar": "GEOZ_ORACLE_PORT",
+    "urlEnvVar": "GEOZ_ORACLE_URL",
+    "defaultUrl": "http://127.0.0.1:4102",
+    "route": "/v1/cryptosure/region-check"
+  }
+}

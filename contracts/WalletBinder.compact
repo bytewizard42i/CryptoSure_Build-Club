@@ -20,10 +20,10 @@
 // written on-chain.
 //
 // WHY ONE CONTRACT
-//   Cross-contract calls are not yet available on Midnight, so splitting
-//   the gate across contracts would require an off-chain attestor to bridge
-//   them, and that attestor becomes a trust hole. Keeping all three trees
-//   in one contract lets a single circuit enforce the whole gate atomically.
+//   Keeping all three trees in one contract lets a single circuit enforce
+//   the whole gate atomically, in one proof. Splitting the gate would need
+//   something to bridge the pieces, and an off-chain attestor in that
+//   position becomes a trust hole.
 //
 // ROLES
 //   admin     — configures roles and the minimum accepted list version
@@ -50,7 +50,7 @@
 //   the holder proves clearance without revealing which address was cleared.
 //
 // COMPILER
-//   compactc 0.35.x, language >= 0.27
+//   Compact toolchain 0.36.1 (language 0.28); pragma accepts >= 0.27
 // ============================================================================
 
 pragma language_version >= 0.27;
