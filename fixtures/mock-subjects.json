@@ -1,0 +1,157 @@
+{
+  "_comment": "SYNTHETIC answers for the mock providers. The people are fictional residents of TestTown (github.com/bytewizard42i/TestTownDIDz), a public test population; the ids are their TestTown slugs and each wallet is that resident's public pre-prod address. Everything else in this file is invented for the demo: TestTown records who someone is and never whether they pass a check, so pass and fail live here, on the provider side. Fields: screening is clean | listed | never-screened; region is a made-up code; identityLevel and educationLevel are 0 (none) or higher; signWithSomeoneElsesKey and declinesToAcknowledge simulate those two behaviours of the PERSON and are read by the demo, not by a provider.",
+  "listVersion": 1,
+  "subjects": [
+    {
+      "id": "bonnie-lachance",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1lvrhq4stt8cxmt77eg6mtfmf9xvaqdt7tq8gu8v0c9tjgaeaderq7pm0a9"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 1,
+      "educationLevel": 1
+    },
+    {
+      "id": "mei-lin-zhao",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1hnxtrxmpm5zu4dwwu07esqehttqgt7hzsqua8ardcngwm8v6uftqkcnl3k"
+      },
+      "screening": "clean",
+      "region": "REGION-B",
+      "identityLevel": 2,
+      "educationLevel": 2
+    },
+    {
+      "id": "theo-brandt",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod16euj8um6jqgkhek77rmpeakux7pxccca6yvd5z7tf0kwqkgg6htqcjmf0e"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 2,
+      "educationLevel": 2
+    },
+    {
+      "id": "marcus-reid",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1nz4vdysgvdvfpdshrausmvf22e6tplwtgs57e3cjcvvqjmgfnh7qq9at7h"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 2,
+      "educationLevel": 1
+    },
+    {
+      "id": "raj-patel",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1agqt80qvchsgtrjjqpdetse9f8kxnjh25wm7v9u7xne6awjz5mds6gdgzd"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 1,
+      "educationLevel": 2
+    },
+    {
+      "id": "priscilla-vance",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1xvd7acekwhxf9sqrw6s9l5fdqm3q45wx9y4j98u22shsqtydagqqsz6vwc"
+      },
+      "screening": "clean",
+      "region": "REGION-Z",
+      "identityLevel": 1,
+      "educationLevel": 1
+    },
+    {
+      "id": "harold-quist",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod19xn6a9crm7fe45xwdda07n4kqtpk3ua6f4n7y6lmll4229cwdwdsrc8fnw"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 0,
+      "educationLevel": 1
+    },
+    {
+      "id": "amos-fairweather",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1fpj5t7ygu2kjjya9qxzra24se6fe7f6h0pv86qzsukcn8mtaxvdq8qkss2"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 1,
+      "educationLevel": 0
+    },
+    {
+      "id": "colin-mcbride",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1vnefxnd2vp7hfckvugqelpe30480kxgs76lkuhx2s83am4u7lrhqadqg2v"
+      },
+      "screening": "listed",
+      "region": "REGION-A",
+      "identityLevel": 1,
+      "educationLevel": 1
+    },
+    {
+      "id": "diego-marchetti",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1tmx2uhnt9z5rx922s6jkkqw3c2a578gan9vhnr3x8vuaer0ax58qx23hc8"
+      },
+      "screening": "never-screened",
+      "region": "REGION-A",
+      "identityLevel": 1,
+      "educationLevel": 1
+    },
+    {
+      "id": "edgar-morrow",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1z9lq9s3fj5sfayeemp4nh7kn8uglpmg0ky6vx6scekfnupmpexas9778au"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 1,
+      "educationLevel": 1,
+      "signWithSomeoneElsesKey": true
+    },
+    {
+      "id": "fern-whitaker",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1234k8az4hk4gg7mkedm5p4lqugnkez7mqkjsarp3vqhymudkgllq7cq8rk"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 2,
+      "educationLevel": 2,
+      "declinesToAcknowledge": true
+    },
+    {
+      "id": "anya-petrova",
+      "wallet": {
+        "chain": "midnight-preprod",
+        "address": "mn_addr_preprod1f7uhadmw2cml5w0522qt5cu437vgypdkhh2ysyhnvklqd9msc3wqcfy956"
+      },
+      "screening": "clean",
+      "region": "REGION-A",
+      "identityLevel": 1,
+      "educationLevel": 1
+    }
+  ],
+  "listedWallets": [
+    {
+      "chain": "midnight-preprod",
+      "address": "mn_addr_preprod1rkklr0fqj9nsjr2pwqqwprcqs5hxh8t2gdscsjhe9wy2v846uzdsr2c8r3"
+    }
+  ]
+}

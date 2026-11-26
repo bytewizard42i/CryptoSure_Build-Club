@@ -1,0 +1,89 @@
+// ============================================================================
+// lib/Pass.compact — how a check contract records and reports a pass
+// ============================================================================
+//
+// WHAT A PASS IS
+//   A public stamp against a ticket: "this ticket passed THIS check, at this
+//   level, and the stamp is good until this time". One Map entry.
+//
+// THE ONE INTERFACE EVERY CHECK SHARES
+//       circuit require_pass(ticket: Bytes<32>, min_level: Uint<8>): Uint<64>
+//   Another contract calls this to ask "does this ticket hold a current pass
+//   of at least this level?". It fails if not, and returns the expiry time if
+//   so. Because all five checks answer the same question in the same shape,
+//   the ClearanceRegistry can treat them as interchangeable slots, and a new
+//   kind of check can be added later without changing any existing contract.
+//
+// WHY require_pass TAKES NO PRIVATE INPUT
+//   Midnight only lets one contract call another contract's circuit if that
+//   circuit uses no witnesses. A pass is public, so nothing private is
+//   needed. Reference: Compact language reference, "Cross-contract calls".
+//
+// LEVELS
+//   A plain number whose meaning belongs to each check. Yes/no checks use 1.
+//   Graded checks (identity, education) use higher numbers for stronger
+//   results. Level 0 is never stored; "0 required" means "not required".
+//
+// EXPIRY
+//   Every pass carries its own shelf life, set per contract by the admin.
+//   A check that goes stale quickly (a ban list) can have a short one; a
+//   slow-changing check (identity) a long one.
+//
+// IDEAS, NOT BUILT
+//   - revoking a single pass (today a pass ends only by expiring)
+//   - charging a fee when a pass is recorded
+//   - emitting an event so an indexer can follow passes without polling
+// ============================================================================
+
+struct PassRecord {
+  level: Uint<8>;        // how strong the result was (1 for yes/no checks)
+  validUntil: Uint<64>;  // unix seconds; the pass is void at and after this
+}
+
+// ticket -> pass. Public by design.
+export ledger passes: Map<Bytes<32>, PassRecord>;
+
+// How long a pass from this contract stays good, in seconds.
+export ledger shelfLifeSeconds: Uint<64>;
+
+// How many passes this contract has ever recorded (dashboards).
+export ledger passCount: Counter;
+
+export circuit set_shelf_life(seconds: Uint<64>): [] {
+  assert_is_admin();
+  const s = disclose(seconds);
+  assert(s > 0, "Shelf life must be longer than zero");
+  shelfLifeSeconds = s;
+}
+
+// Works out when a pass ends: the earlier of "issued now + shelf life" and
+// the moment the underlying evidence itself runs out.
+//
+// `issued_at` is supplied by the holder because a circuit cannot read the
+// clock, only compare against it. The assert pins it to "not in the future",
+// so a holder can never give themselves extra time. Claiming an OLDER time
+// only shortens their own pass.
+circuit pass_expiry(issued_at: Uint<64>, evidence_expires_at: Uint<64>): Uint<64> {
+  assert(blockTimeGte(issued_at), "issued_at is in the future");
+  const by_shelf_life = (issued_at + shelfLifeSeconds) as Uint<64>;
+  return by_shelf_life < evidence_expires_at ? by_shelf_life : evidence_expires_at;
+}
+
+// Stamps the pass. Called only from this contract's own holder circuit,
+// after the private proof has succeeded.
+circuit record_pass(ticket: Bytes<32>, level: Uint<8>, valid_until: Uint<64>): [] {
+  assert(level > 0, "A pass must have a level above zero");
+  assert(blockTimeLt(valid_until), "The evidence for this pass has already expired");
+  passes.insert(ticket, PassRecord { level: level, validUntil: valid_until });
+  passCount.increment(1);
+}
+
+// THE SHARED INTERFACE. Witness-free, so other contracts may call it.
+export circuit require_pass(ticket: Bytes<32>, min_level: Uint<8>): Uint<64> {
+  const t = disclose(ticket);
+  assert(passes.member(t), "This ticket has no pass from this check");
+  const pass = passes.lookup(t);
+  assert(pass.level >= disclose(min_level), "The pass level is below what is required");
+  assert(blockTimeLt(pass.validUntil), "The pass from this check has expired");
+  return pass.validUntil;
+}

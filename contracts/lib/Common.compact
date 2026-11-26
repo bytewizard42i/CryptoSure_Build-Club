@@ -1,0 +1,103 @@
+// ============================================================================
+// lib/Common.compact — keys and roles shared by every CryptoSure contract
+// ============================================================================
+//
+// WHAT THIS FILE IS
+//   An INCLUDE file, not a contract. Each contract pulls it in with
+//       include "lib/Common";      (relative to the contract; the compiler adds .compact)
+//   and the compiler splices these declarations into that contract as if they
+//   had been typed there. Every contract therefore gets its OWN copy of the
+//   ledger fields below; nothing is shared on-chain between contracts.
+//   Reference: Compact language reference, "Include files".
+//
+// WHY IT EXISTS
+//   Every contract needs the same two things: "who is calling?" and "are they
+//   allowed to?". Writing that once means a fix lands everywhere.
+//
+// HOW A CALLER IS IDENTIFIED
+//   Midnight has no msg.sender. A caller proves who they are by knowing a
+//   secret key. The contract asks the caller's device for it through the
+//   `local_secret_key` witness, hashes it, and compares the hash with the keys
+//   it has on file. The secret itself never leaves the device or the proof.
+//
+// ROLES (the same two in every contract)
+//   admin     configures the contract and appoints operators
+//   operator  the one outside party this contract trusts to feed it facts
+//             (a screening provider, an identity issuer, an education
+//             provider...). Contracts that take no outside facts simply never
+//             appoint one.
+//
+// IDEAS, NOT BUILT
+//   - two-step admin handover (propose, then accept) so a typo cannot lock a
+//     contract
+//   - M-of-N admin approval for sensitive changes (see the multi-party
+//     authorization pattern in Midnight Expert's governance patterns)
+//   - an on-chain log of role changes for auditors
+// ============================================================================
+
+// The caller's secret key, supplied by their own device. NEVER disclosed.
+witness local_secret_key(): Bytes<32>;
+
+// Who may configure this contract, and who may feed it facts.
+export ledger admins: Set<Bytes<32>>;
+export ledger operators: Set<Bytes<32>>;
+
+// True once the first admin has claimed the contract. See claim_admin.
+export ledger adminClaimed: Boolean;
+
+// The public key that represents a ROLE holder (admin or operator).
+// The text prefix is a "domain separator": it guarantees this hash can never
+// collide with a hash computed for a different purpose from the same secret.
+export circuit derive_role_key(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:role:pk:"),
+    sk
+  ]);
+}
+
+// The public key that represents a HOLDER (the person being cleared).
+// A different prefix from the role key, so the same secret used in both
+// roles produces two unrelated public keys.
+export circuit derive_holder_key(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:holder:pk:"),
+    sk
+  ]);
+}
+
+circuit caller_role_key(): Bytes<32> {
+  return derive_role_key(local_secret_key());
+}
+
+circuit assert_is_admin(): [] {
+  assert(admins.member(disclose(caller_role_key())), "Caller is not an admin");
+}
+
+circuit assert_is_operator(): [] {
+  assert(operators.member(disclose(caller_role_key())), "Caller is not an approved operator");
+}
+
+// The deployer calls this once, straight after deployment, to become the
+// first admin. KNOWN LIMIT: whoever calls first wins, so deploy and claim in
+// the same breath. A production version would set the admin in the
+// constructor.
+export circuit claim_admin(): [] {
+  assert(!adminClaimed, "Admin already claimed");
+  admins.insert(disclose(caller_role_key()));
+  adminClaimed = true;
+}
+
+export circuit add_admin(admin_key: Bytes<32>): [] {
+  assert_is_admin();
+  admins.insert(disclose(admin_key));
+}
+
+export circuit add_operator(operator_key: Bytes<32>): [] {
+  assert_is_admin();
+  operators.insert(disclose(operator_key));
+}
+
+export circuit remove_operator(operator_key: Bytes<32>): [] {
+  assert_is_admin();
+  operators.remove(disclose(operator_key));
+}

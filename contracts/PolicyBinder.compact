@@ -1,0 +1,165 @@
+// ============================================================================
+// PolicyBinder.compact
+// "This cleared wallet is now bound to this policy."
+// ============================================================================
+//
+// ONE JOB
+//   Record that a wallet is bound to an insurance policy, but only if its
+//   ticket is clear for the profile that policy's cover class demands.
+//
+// THE TWO KINDS OF CONTRACT (do not confuse them)
+//   - THIS is a smart contract: code on Midnight.
+//   - The POLICY is the insurance agreement between a person and an
+//     underwriter. It is a private document and is never put on-chain. Only
+//     `policy_ref`, a 32-byte fingerprint of the completed agreement, is
+//     used here, and even that stays hidden inside a commitment.
+//
+// COVER CLASSES
+//   A cover class is a label for a kind of policy (for example a size band).
+//   The admin maps each cover class to the clearance profile it requires.
+//   The holder names the cover class; THE CONTRACT looks up the profile.
+//   So a holder cannot bind a demanding policy on the strength of an easy
+//   clearance: the requirement is read from the ledger, not supplied by
+//   the caller.
+//
+// WHAT THE HOLDER PROVES
+//   1. The ticket is mine (I can open it).
+//   2. The ticket is clear for the profile this cover class requires
+//      (asked of the ClearanceRegistry, in the same transaction).
+//   3. This wallet is not already bound.
+//
+// WHAT THE CHAIN SEES
+//   - the ticket and the cover class
+//   - a binding nullifier (stops the same wallet being bound twice)
+//   - a hidden binding commitment
+//   Not the person, the address, or the policy.
+//
+// A PRIVACY NOTE ABOUT walletHash
+//   The nullifier is a hash of walletHash. If walletHash were a plain hash
+//   of the address, anyone could hash a known address and look for it here.
+//   So walletHash MUST be a KEYED hash: computed with a secret that only the
+//   program's operators hold. This contract cannot enforce that; the
+//   off-chain code does. See docs/design/protocol.md.
+//
+// IDEAS, NOT BUILT
+//   - hiding the cover class, so an observer cannot tell a small policy from
+//     a large one
+//   - a policy that covers one transfer, bound to a PairReceipt
+//   - premium payment in the same transaction
+//   - the underwriter co-signing the binding
+//   - an opening key held by a trusted third party, released only against a
+//     warrant or a claim investigation (needs its own design and decision)
+// ============================================================================
+
+pragma language_version >= 0.28;
+
+import CompactStandardLibrary;
+
+include "lib/Common";
+include "lib/Ticket";
+
+contract Clearance {
+  circuit require_clearance(ticket: Bytes<32>, profile_id: Bytes<32>): Uint<64>;
+}
+
+// What a binding commitment seals.
+struct BindingBody {
+  holderPk: Bytes<32>;
+  walletHash: Bytes<32>;
+  policyRef: Bytes<32>;    // fingerprint of the completed private agreement
+  coverClass: Bytes<32>;
+}
+
+// One-entry table: the ClearanceRegistry this binder trusts (admin-settable).
+export ledger clearanceRegistry: Map<Uint<8>, Clearance>;
+
+// cover class id -> the clearance profile it requires.
+export ledger coverClasses: Map<Bytes<32>, Bytes<32>>;
+
+// Bindings as hidden commitments, plus one nullifier per bound wallet.
+export ledger bindings: HistoricMerkleTree<16, Bytes<32>>;
+export ledger bindingNullifiers: Set<Bytes<32>>;
+
+export ledger bindingCount: Counter;
+
+// Private inputs from the holder's device.
+witness get_binding_salt(): Bytes<32>;
+witness get_binding_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+constructor() {
+  adminClaimed = false;
+}
+
+// One wallet, one active binding.
+export circuit derive_binding_nullifier(wallet_hash: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:binder:nullifier:"),
+    wallet_hash
+  ]);
+}
+
+// ADMIN: say which ClearanceRegistry to ask.
+export circuit set_clearance_registry(registry: Clearance): [] {
+  assert_is_admin();
+  clearanceRegistry.insert(0, disclose(registry));
+}
+
+// ADMIN: say which profile a cover class requires.
+export circuit define_cover_class(cover_class: Bytes<32>, required_profile: Bytes<32>): [] {
+  assert_is_admin();
+  coverClasses.insert(disclose(cover_class), disclose(required_profile));
+}
+
+// HOLDER: bind my cleared wallet to a policy. Returns the binding commitment.
+export circuit bind_policy(ticket: Bytes<32>, cover_class: Bytes<32>, policy_ref: Bytes<32>): Bytes<32> {
+  const t = disclose(ticket);
+  const c = disclose(cover_class);
+  const sealed_in_ticket = open_own_ticket(t);
+
+  assert(coverClasses.member(c), "There is no such cover class");
+  assert(clearanceRegistry.member(0), "No clearance registry has been set");
+  clearanceRegistry.lookup(0).require_clearance(t, coverClasses.lookup(c));
+
+  const nullifier = disclose(derive_binding_nullifier(sealed_in_ticket.walletHash));
+  assert(!bindingNullifiers.member(nullifier), "This wallet is already bound to a policy");
+  bindingNullifiers.insert(nullifier);
+
+  const binding = persistentCommit<BindingBody>(
+    BindingBody {
+      holderPk: sealed_in_ticket.holderPk,
+      walletHash: sealed_in_ticket.walletHash,
+      policyRef: policy_ref,
+      coverClass: c
+    },
+    get_binding_salt()
+  );
+  bindings.insert(disclose(binding));
+  bindingCount.increment(1);
+  return disclose(binding);
+}
+
+// HOLDER, at claim time: prove "the wallet I am claiming on is the one bound
+// to this policy" without naming the wallet.
+export circuit prove_binding(cover_class: Bytes<32>, policy_ref: Bytes<32>): Boolean {
+  const binding = persistentCommit<BindingBody>(
+    BindingBody {
+      holderPk: derive_holder_key(local_secret_key()),
+      walletHash: get_wallet_hash(),
+      policyRef: policy_ref,
+      coverClass: disclose(cover_class)
+    },
+    get_binding_salt()
+  );
+  const root = merkleTreePathRoot<16, Bytes<32>>(get_binding_path(binding));
+  assert(bindings.checkRoot(disclose(root)), "There is no such binding");
+  return true;
+}
+
+// ADMIN: free a wallet to be bound again, when a policy ends or the wallet
+// must be re-cleared.
+export circuit release_binding(wallet_hash: Bytes<32>): [] {
+  assert_is_admin();
+  const nullifier = disclose(derive_binding_nullifier(wallet_hash));
+  assert(bindingNullifiers.member(nullifier), "This wallet is not bound");
+  bindingNullifiers.remove(nullifier);
+}

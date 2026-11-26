@@ -1,0 +1,87 @@
+// ============================================================================
+// CHECK 5 of 5 — WalletControlCheck.compact
+// "Does this holder actually control the wallet they are asking about?"
+// ============================================================================
+//
+// ONE JOB
+//   Hold signature attestations, and stamp a pass on a ticket whose holder
+//   AND wallet both match one.
+//
+// HOW CONTROL IS SHOWN
+//   The holder signs a fresh challenge with the wallet's own key, in their
+//   wallet app. A signature verifier checks that signature off-chain and
+//   records a hidden attestation here saying "this holder key signed for
+//   this wallet".
+//
+// WHY THE SIGNATURE IS NOT CHECKED INSIDE THE PROOF
+//   Wallets on other chains sign with their own schemes (ECDSA or Schnorr on
+//   secp256k1). Checking those inside a Midnight proof is not something this
+//   MVP does, so a verifier attests to it instead. This is the same kind of
+//   trust as the other checks, and it is stated here so nobody has to
+//   discover it.
+//
+// WHO DOES WHAT
+//   operator  the signature verifier.
+//   holder    proves the attestation names both their key and the wallet in
+//             their ticket. Gets a pass.
+//
+// IDEAS, NOT BUILT
+//   - verifying the signature in-circuit for wallets whose scheme Compact
+//     supports natively
+//   - a multi-sig wallet: a pass that needs attestations from M of N signers
+//   - re-proving control on a schedule, to catch a wallet that changed hands
+// ============================================================================
+
+pragma language_version >= 0.28;
+
+import CompactStandardLibrary;
+
+include "../lib/Common";
+include "../lib/Ticket";
+include "../lib/Pass";
+
+// What the verifier's hidden attestation commits to.
+struct ControlAttestation {
+  holderPk: Bytes<32>;     // the holder key that asked
+  walletHash: Bytes<32>;   // the wallet whose key signed the challenge
+  expiresAt: Uint<64>;     // unix seconds
+}
+
+export ledger attestations: HistoricMerkleTree<16, Bytes<32>>;
+
+witness get_control_attestation(): ControlAttestation;
+witness get_control_attestation_salt(): Bytes<32>;
+witness get_control_attestation_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+constructor() {
+  adminClaimed = false;
+  shelfLifeSeconds = 2592000;   // 30 days
+}
+
+// Public helper: seals a wallet-control attestation exactly the way the proof re-computes it, so
+// off-chain code never has to guess the byte layout.
+export circuit commit_control_attestation(body: ControlAttestation, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<ControlAttestation>(body, salt);
+}
+
+// OPERATOR: record a sealed attestation after checking the signature.
+export circuit record_control_attestation(commitment: Bytes<32>): [] {
+  assert_is_operator();
+  attestations.insert(disclose(commitment));
+}
+
+// HOLDER: prove the attestation is about me and about the wallet in my ticket.
+export circuit prove_wallet_control(ticket: Bytes<32>, issued_at: Uint<64>): [] {
+  const t = disclose(ticket);
+  const sealed_in_ticket = open_own_ticket(t);
+
+  const attestation = get_control_attestation();
+  assert(attestation.holderPk == sealed_in_ticket.holderPk, "This attestation is about a different holder");
+  assert(attestation.walletHash == sealed_in_ticket.walletHash, "This attestation is about a different wallet");
+
+  const leaf = persistentCommit<ControlAttestation>(attestation, get_control_attestation_salt());
+  const root = merkleTreePathRoot<16, Bytes<32>>(get_control_attestation_path(leaf));
+  assert(attestations.checkRoot(disclose(root)), "No such wallet-control attestation");
+
+  record_pass(t, 1, disclose(pass_expiry(disclose(issued_at), attestation.expiresAt)));
+}

@@ -1,0 +1,84 @@
+// ============================================================================
+// CHECK 4 of 5 — EducationCheck.compact
+// "Has this holder passed the required education, and to what level?"
+// ============================================================================
+//
+// ONE JOB
+//   Hold education certificates, and stamp a pass, at the certificate's
+//   level, on the ticket of the holder who earned it.
+//
+// WHO DOES WHAT
+//   operator  an education provider (a black box to us). Sets and grades the
+//             test off-chain. Records a hidden certificate ONLY for a pass.
+//   holder    proves the certificate is theirs and current. Gets a pass
+//             carrying the certificate's LEVEL.
+//
+// LEVELS
+//   A higher level means a harder course was passed. What each level covers
+//   (which modules, which pass mark) is the provider's business and is not
+//   recorded here. Whoever relies on the pass says what minimum they need.
+//
+// WHY THE TEST IS NOT ON-CHAIN
+//   Questions, answers and scores are private to the provider and the
+//   holder. The chain only needs the outcome.
+//
+// IDEAS, NOT BUILT
+//   - revoking a certificate (for example, cheating found later)
+//   - a certificate that must be renewed after the course content changes
+//   - proving the score was above a mark, with the mark public and the score
+//     hidden
+// ============================================================================
+
+pragma language_version >= 0.28;
+
+import CompactStandardLibrary;
+
+include "../lib/Common";
+include "../lib/Ticket";
+include "../lib/Pass";
+
+// What the provider's hidden certificate commits to.
+struct EducationCertificate {
+  holderPk: Bytes<32>;        // who earned it
+  level: Uint<8>;             // which course level was passed
+  certificateId: Bytes<32>;   // random id shared by provider and holder
+  expiresAt: Uint<64>;        // unix seconds
+}
+
+export ledger certificates: HistoricMerkleTree<16, Bytes<32>>;
+
+witness get_education_certificate(): EducationCertificate;
+witness get_education_certificate_salt(): Bytes<32>;
+witness get_education_certificate_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+constructor() {
+  adminClaimed = false;
+  shelfLifeSeconds = 31536000;   // one year
+}
+
+// Public helper: seals an education certificate exactly the way the proof re-computes it, so
+// off-chain code never has to guess the byte layout.
+export circuit commit_education_certificate(body: EducationCertificate, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<EducationCertificate>(body, salt);
+}
+
+// OPERATOR: record a sealed certificate for a holder who passed.
+export circuit issue_certificate(commitment: Bytes<32>): [] {
+  assert_is_operator();
+  certificates.insert(disclose(commitment));
+}
+
+// HOLDER: prove my certificate and record its level.
+export circuit prove_education(ticket: Bytes<32>, issued_at: Uint<64>): [] {
+  const t = disclose(ticket);
+  const sealed_in_ticket = open_own_ticket(t);
+
+  const certificate = get_education_certificate();
+  assert(certificate.holderPk == sealed_in_ticket.holderPk, "This education certificate belongs to someone else");
+
+  const leaf = persistentCommit<EducationCertificate>(certificate, get_education_certificate_salt());
+  const root = merkleTreePathRoot<16, Bytes<32>>(get_education_certificate_path(leaf));
+  assert(certificates.checkRoot(disclose(root)), "No such education certificate");
+
+  record_pass(t, disclose(certificate.level), disclose(pass_expiry(disclose(issued_at), certificate.expiresAt)));
+}

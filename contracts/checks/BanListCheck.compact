@@ -1,0 +1,111 @@
+// ============================================================================
+// CHECK 1 of 5 — BanListCheck.compact
+// "Has this wallet been screened against the ban list, recently, and cleared?"
+// ============================================================================
+//
+// ONE JOB
+//   Hold screening results, and stamp a pass on a ticket whose wallet has a
+//   fresh, clean result. Nothing else lives here.
+//
+// WHO DOES WHAT
+//   operator  a screening provider. Checks an address against the ban list
+//             OFF-chain (sanctions lists, a reject list we keep ourselves...)
+//             and, if it is clean, records a hidden leaf here.
+//   holder    proves, in zero knowledge, that the wallet sealed in their
+//             ticket has such a leaf. Gets a pass.
+//
+// WHAT THE CHAIN SEES
+//   Hidden leaves, a Merkle root being checked, and "ticket X passed".
+//   Never the address.
+//
+// HONEST LIMIT
+//   List-based screening has to look at the address, so the OPERATOR sees
+//   it, exactly as any compliance vendor does today. Midnight's contribution
+//   is that the result reaches the chain hidden and is used without
+//   revealing which address it was.
+//
+// FRESHNESS
+//   Lists change. Each result names the list version it was checked against;
+//   the admin raises minAcceptedListVersion after a refresh and older results
+//   stop working. On top of that, the pass itself has a short shelf life.
+//
+// IDEAS, NOT BUILT
+//   - several independent screening providers, with a pass needing 2 of 3
+//   - a proof from a trusted execution environment in place of the
+//     operator's word, so nobody has to see the address at all
+//   - risk tiers (level 1 = not listed, level 2 = also low exposure to
+//     listed counterparties)
+// ============================================================================
+
+pragma language_version >= 0.28;
+
+import CompactStandardLibrary;
+
+include "../lib/Common";
+include "../lib/Ticket";
+include "../lib/Pass";
+
+// What the operator's hidden leaf commits to.
+struct ScreeningBody {
+  walletHash: Bytes<32>;   // hash of "chain:address"
+  listVersion: Uint<64>;   // which edition of the list was checked
+}
+
+// Screening results, as hidden leaves. "Historic" means a proof made against
+// a slightly older root still verifies after new leaves are added.
+export ledger screenings: HistoricMerkleTree<16, Bytes<32>>;
+
+// Results from list versions older than this are no longer accepted.
+export ledger minAcceptedListVersion: Uint<64>;
+
+// Private inputs from the holder's device.
+witness get_list_version(): Uint<64>;
+witness get_screening_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+constructor() {
+  adminClaimed = false;
+  minAcceptedListVersion = 0;
+  shelfLifeSeconds = 86400;   // one day: a ban list goes stale quickly
+}
+
+// Public helper so off-chain code derives the leaf exactly as the circuit does.
+export circuit derive_screening_leaf(body: ScreeningBody): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([
+    pad(32, "cryptosure:banlist:leaf:"),
+    body.walletHash,
+    body.listVersion as Bytes<32>
+  ]);
+}
+
+// OPERATOR: "I checked this wallet against list version N and it is clean."
+export circuit record_screening(body: ScreeningBody): [] {
+  assert_is_operator();
+  screenings.insert(disclose(derive_screening_leaf(body)));
+}
+
+// ADMIN: raise the freshness floor after the list is refreshed.
+export circuit set_min_list_version(version: Uint<64>): [] {
+  assert_is_admin();
+  const v = disclose(version);
+  assert(v >= minAcceptedListVersion, "The list version floor cannot go backwards");
+  minAcceptedListVersion = v;
+}
+
+// HOLDER: prove the wallet in my ticket has a fresh clean result.
+export circuit prove_not_listed(ticket: Bytes<32>, issued_at: Uint<64>): [] {
+  const t = disclose(ticket);
+  const sealed_in_ticket = open_own_ticket(t);
+
+  const version = get_list_version();
+  assert(disclose(version >= minAcceptedListVersion), "The screening result is stale");
+
+  const leaf = derive_screening_leaf(ScreeningBody {
+    walletHash: sealed_in_ticket.walletHash,
+    listVersion: version
+  });
+  const root = merkleTreePathRoot<16, Bytes<32>>(get_screening_path(leaf));
+  assert(screenings.checkRoot(disclose(root)), "This wallet has not been cleared by screening");
+
+  // A screening result has no expiry of its own, so only the shelf life applies.
+  record_pass(t, 1, pass_expiry(disclose(issued_at), 18446744073709551615));
+}

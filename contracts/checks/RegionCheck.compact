@@ -1,0 +1,98 @@
+// ============================================================================
+// CHECK 2 of 5 — RegionCheck.compact
+// "Is this holder inside a region the program is allowed to serve?"
+// ============================================================================
+//
+// ONE JOB
+//   Hold region attestations and the list of allowed regions, and stamp a
+//   pass on a ticket whose holder was placed in an allowed region.
+//
+// WHO DOES WHAT
+//   operator  a region oracle (a black box to us). Decides where the holder
+//             is, off-chain, and records a hidden attestation here.
+//   admin     publishes the regions the program may serve.
+//   holder    proves their attestation exists, has not expired, and names an
+//             allowed region. Gets a pass.
+//
+// WHAT THE CHAIN SEES
+//   That SOME allowed region matched. Not which one, and not who.
+//
+// IDEAS, NOT BUILT
+//   - a deny-list of regions as well as an allow-list
+//   - different allowed regions per cover class (today one list per contract;
+//     deploy a second RegionCheck for a second program)
+//   - proving "in region" without any oracle, from a signed location source
+// ============================================================================
+
+pragma language_version >= 0.28;
+
+import CompactStandardLibrary;
+
+include "../lib/Common";
+include "../lib/Ticket";
+include "../lib/Pass";
+
+// What the region oracle's hidden attestation commits to.
+struct RegionAttestation {
+  holderPk: Bytes<32>;     // who it is about
+  regionLeaf: Bytes<32>;   // derive_region_leaf(region code)
+  expiresAt: Uint<64>;     // unix seconds; issuers should round this coarsely
+}
+
+export ledger attestations: HistoricMerkleTree<16, Bytes<32>>;
+export ledger allowedRegions: HistoricMerkleTree<8, Bytes<32>>;
+
+witness get_region_attestation(): RegionAttestation;
+witness get_region_attestation_salt(): Bytes<32>;
+witness get_region_attestation_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+witness get_allowed_region_path(leaf: Bytes<32>): MerkleTreePath<8, Bytes<32>>;
+
+constructor() {
+  adminClaimed = false;
+  shelfLifeSeconds = 2592000;   // 30 days: people move, but not daily
+}
+
+// Region code (for example "US-PA", padded to 32 bytes) -> the leaf stored.
+export circuit derive_region_leaf(code: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:region:leaf:"),
+    code
+  ]);
+}
+
+// Public helper: seals a region attestation exactly the way the proof re-computes it, so
+// off-chain code never has to guess the byte layout.
+export circuit commit_region_attestation(body: RegionAttestation, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<RegionAttestation>(body, salt);
+}
+
+// ADMIN: allow a region.
+export circuit add_allowed_region(code: Bytes<32>): [] {
+  assert_is_admin();
+  allowedRegions.insert(disclose(derive_region_leaf(code)));
+}
+
+// OPERATOR: record a sealed attestation. The opening (body + salt) is handed
+// to the holder out of band.
+export circuit record_region_attestation(commitment: Bytes<32>): [] {
+  assert_is_operator();
+  attestations.insert(disclose(commitment));
+}
+
+// HOLDER: prove I was placed in an allowed region.
+export circuit prove_in_region(ticket: Bytes<32>, issued_at: Uint<64>): [] {
+  const t = disclose(ticket);
+  const sealed_in_ticket = open_own_ticket(t);
+
+  const attestation = get_region_attestation();
+  assert(attestation.holderPk == sealed_in_ticket.holderPk, "This region attestation is about someone else");
+
+  const leaf = persistentCommit<RegionAttestation>(attestation, get_region_attestation_salt());
+  const root = merkleTreePathRoot<16, Bytes<32>>(get_region_attestation_path(leaf));
+  assert(attestations.checkRoot(disclose(root)), "No such region attestation");
+
+  const allowed_root = merkleTreePathRoot<8, Bytes<32>>(get_allowed_region_path(attestation.regionLeaf));
+  assert(allowedRegions.checkRoot(disclose(allowed_root)), "The attested region is not one this program serves");
+
+  record_pass(t, 1, disclose(pass_expiry(disclose(issued_at), attestation.expiresAt)));
+}

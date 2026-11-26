@@ -1,0 +1,24 @@
+{
+  "_comment": "GENERIC demo configuration for one CryptoSure program. Everything an operator would tune lives here, not in code: which check sits in which slot, what each profile demands, which profile each cover class requires, and which regions are served. Names and numbers are placeholders chosen to show the mechanism. A real program supplies its own file.",
+  "slots": {
+    "_comment": "slot number -> which check contract is plugged in. The numbers are this program's convention; the ClearanceRegistry attaches no meaning to them. Slots 5 to 7 are free for checks not yet invented.",
+    "banList": 0,
+    "region": 1,
+    "identity": 2,
+    "education": 3,
+    "walletControl": 4
+  },
+  "profiles": {
+    "_comment": "A profile lists the MINIMUM level needed from each check, in slot order, as minLevels[slot]. 0 means that check is not required. shelfLifeSeconds is the longest a clearance lasts.",
+    "basic":    { "minLevels": { "banList": 1, "walletControl": 1 }, "shelfLifeSeconds": 86400 },
+    "standard": { "minLevels": { "banList": 1, "region": 1, "identity": 1, "education": 1, "walletControl": 1 }, "shelfLifeSeconds": 86400 },
+    "enhanced": { "minLevels": { "banList": 1, "region": 1, "identity": 2, "education": 2, "walletControl": 1 }, "shelfLifeSeconds": 86400 }
+  },
+  "coverClasses": {
+    "_comment": "cover class -> the clearance profile a wallet must hold before a policy of that class can be bound to it.",
+    "cover-standard": "standard",
+    "cover-enhanced": "enhanced"
+  },
+  "pairCheckProfile": "basic",
+  "allowedRegions": ["REGION-A", "REGION-B"]
+}

@@ -22,197 +22,111 @@ insurance market just hasn't been built for it yet. We're building it.
   you are or what you hold
 - Recovery-aware claims: claims that trace and fight, not just pay
 
-## First instrument: the WalletBinder
+## The Build Club MVP: clear a wallet once, use it two ways
 
-Before a wallet can be attached to a policy, three things must be true.
-It must not be on a sanctions denylist. Its holder must have passed KYC
-(Know Your Customer, the identity verification regulated financial firms
-are required to perform) with an approved provider. And the holder must be in a jurisdiction the
-program is licensed for.
+A wallet is **cleared** by passing a set of checks. The result is recorded
+on Midnight as a pass against an anonymous ticket: the chain learns that
+*some* wallet passed, and nothing about whose. A clearance can then be used
+two ways:
 
-Today, proving those three things means handing an insurer your identity,
-your address, and your wallet. `contracts/WalletBinder.compact` proves all
-three in a single ZK (zero-knowledge) proof on Midnight instead:
+- **Advise on a transfer.** Are the sender and the receiver both clear?
+  The answer is advice. Nothing is held, blocked, or routed through us.
+- **Bind a policy.** A cleared wallet can be bound to an insurance policy.
 
-| Check | What the chain sees | What it never sees |
-|---|---|---|
-| Banned-Address Sanctions | A Merkle root check against the screening tree | Which wallet was screened |
-| KYC | A root check, a level threshold passed, a coarse expiry | Name, documents, or which credential |
-| Jurisdiction-Compliance | A root check against the allowed-jurisdiction tree | Where the holder lives |
+### One contract per job
 
-A single-use nullifier prevents the same wallet from being bound twice.
-The binding itself is a hidden commitment; at claim time the holder proves
-"the wallet I am claiming on is the one that was bound" without publishing
-it. Denylists churn (entries get added and delisted), so every clearance
-carries a list version and the contract enforces a freshness floor.
+Each check is its own contract, and so is each use of a clearance. Any one
+can be replaced without touching the others.
 
-### The black boxes: identity, location, and the ZK proof
+| Contract | Its one job |
+|---|---|
+| `checks/BanListCheck` | Has this wallet been screened against the ban list, recently, and cleared? |
+| `checks/RegionCheck` | Is the holder in a region the program serves? |
+| `checks/IdentityCheck` | Has an approved issuer verified the holder, and how strongly? |
+| `checks/EducationCheck` | Has the holder passed the required education, and to what level? |
+| `checks/WalletControlCheck` | Does the holder control the wallet they are asking about? |
+| `ClearanceRegistry` | Does this ticket hold every pass a profile asks for? Then record the clearance. |
+| `PairReceipt` | Were two tickets, a sender and a receiver, both clear at this moment? Issue a dated receipt. |
+| `PolicyBinder` | Bind a policy to a wallet that is cleared for what that policy demands. |
 
-Three instruments feed the WalletBinder, and all three are **outside the
-scope of this Build Club project**. CryptoSure treats each as a sealed
-black box: we consume its output and never look inside.
+```
+ five check contracts ──► ClearanceRegistry ──► PolicyBinder
+ (each answers                 │
+  require_pass)                └──────────────► PairReceipt
+```
 
-> **Status: placeholders.** KYCz and GeoZ exist in this repo only as
-> interfaces and test fixtures. The intent is to deliver them later as
-> opaque binary JavaScript modules — a public interface wrapped around a
-> sealed implementation, so integrators can call them without being able
-> to read their internals.
->
-> The linked repositories are private, proprietary external protocols
-> with limited access; a 404 from those links means the repo is
-> restricted, not that it doesn't exist.
+- **Slots.** The registry keeps eight numbered slots, each pointing at a
+  check contract. Five are used. An administrator can repoint a slot at a
+  new contract or plug a new kind of check into a free one.
+- **Profiles.** A profile is a list of minimum levels, one per slot. "How
+  much checking is enough" is data in `config/program.json`, not code.
+- **Shelf life.** Every pass expires on its own schedule (a ban-list pass in
+  a day, an identity pass in months). A clearance never outlives its weakest
+  pass, and passes that are still good are reused, not repeated.
+- **Fail fast.** Checks run cheapest first and stop at the first failure.
+- **Three outcomes.** Clear, unsure, or not cleared.
 
-**KYCz** ([repo — private](https://github.com/bytewizard42i/KYCz_us_app)),
-our privacy-preserving KYC component. A trusted
-issuer (an exchange, a government provider, or a licensed KYC vendor) runs
-full KYC on the potential insured and enters everything it collected into
-the KYCz protocol. The issuer certifies that the contents are correct and
-sufficient for the applicable KYC standard, then seals the box. What
-CryptoSure receives is the sealed box: a cryptographic commitment we can
-verify but cannot open. The box is trap-doored, and the trap door is held
-by the trusted issuer, not by us. If the holder is suspected of a crime
-and a warrant is issued, the warrant is served on the issuer, who opens
-the box and releases the identity behind the wallet. Absent a warrant,
-all CryptoSure ever learns is what the ZK proof tells us: once we have
-verified the proof is authentic, this wallet's holder qualifies for KYC
-at the required level, and we need to know nothing else about them.
+The contracts call each other with Midnight's cross-contract calls, which
+need ledger 9 and Compact toolchain 0.36.1. Design notes, what is disclosed
+on-chain, and known limits: [`docs/design/protocol.md`](docs/design/protocol.md).
 
-**GeoZ** ([repo — private](https://github.com/bytewizard42i/GeoZ_us_app_Midnight-Oracle)),
-our privacy-preserving location component. Same setup for location. A trusted issuer attests the holder's region, GeoZ seals it,
-and the proof tells us only that the holder is inside a jurisdiction the
-program is licensed for. Where in that jurisdiction, we never learn.
+### Providers are black boxes
 
-**The ZK proof itself** is the third black box. It is produced by the
-holder's own device from openings we never see, and verified on Midnight.
-We check that it is valid; we do not, and cannot, inspect its inputs.
+The protocol does not know how to answer any of the five questions. Each
+answer comes from a provider: a question goes in, and pass, refuse or
+unknown comes out, with an opaque reference and never a reason. This
+repository ships only **mock** providers with synthetic answers, so it runs
+anywhere. Real providers live in their own repositories and plug in through
+the interface in [`protocol/providers/README.md`](protocol/providers/README.md).
 
-Add to those the one check CryptoSure performs directly: the wallet
-address must not appear on the banned-address libraries (sanctions
-denylists such as the SDN (Specially Designated Nationals) list kept by
-OFAC (the United States Treasury's Office of Foreign Assets Control) and
-the consolidated sanctions lists of the European Union, the United
-Kingdom, and the United Nations). Together these are the whole gate. KYC qualified, in-jurisdiction,
-not on a denylist, proven in zero knowledge, with lawful access preserved
-through the issuer. Integration interfaces for KYCz and GeoZ will be
-published when the modules ship; until then they are represented here by
-test fixtures only.
+### Run it
 
-Roles are explicit: an **issuer** (exchange, government provider, or
-licensed KYC vendor) inserts credential commitments; a **screener** inserts
-sanctions clearances; an **admin** manages roles, jurisdictions, and the
-freshness floor. Everything is a Merkle membership proof, so the chain
-learns that *some* eligible holder bound *some* cleared wallet, and nothing
-else.
-
-### Status of the contract
-
-- Compiles under the Compact toolchain 0.36.1 (language 0.28, the ledger 9
-  line) with full proving keys, 18 circuits. The contract is written as
-  production logic, not a sketch.
-- Honest boundary: list-based sanctions screening requires the screener to
-  see the address it screens, exactly as every compliance vendor does
-  today. Midnight's contribution is that the result reaches the chain as a
-  hidden leaf and the holder proves clearance without revealing which
-  address was cleared.
-- The three checks live in one contract on purpose: a single proof
-  enforces the whole gate atomically, and no off-chain attestor bridges
-  separate contracts.
-- Not yet deployed to a public network. The flow below runs the compiled
-  contract locally.
-
-### The binding flow (runnable)
-
-![Binding an insurance policy to one wallet: off-chain checks on the left, one on-chain binding on the right](media/wallet-binding-slide.png)
-
-An applicant chooses one of five wallet-cover policies. Each has its own
-prerequisites, and larger cover asks for more:
-
-| Policy | Cover limit | KYC level | CryptoSureEdu modules | Pass mark |
-|---|---|---|---|---|
-| `CS-WALLET-500` | $500 | 1 | 2 | 70% |
-| `CS-WALLET-1000` | $1,000 | 1 | 3 | 70% |
-| `CS-WALLET-2500` | $2,500 | 2 | 4 | 80% |
-| `CS-WALLET-5000` | $5,000 | 2 | 5 | 80% |
-| `CS-WALLET-10000` | $10,000 | 2 | 6 | 90% |
-
-Limits are the product tiers; premiums, deductibles, module lists and pass
-marks in `policies/policy-catalog.json` are placeholders.
-
-One command walks eleven synthetic applicants through the whole flow:
-
-1. validate the user (KYCz, GeoZ)
-2. prove they hold the wallet
-3. validate the wallet
-4. pass the CryptoSureEdu test for the chosen policy
-5. sign, with the insured wallet, that they understand the agreement
-6. bind the policy
-7. prove the binding
-
-The on-chain policy reference is the hash of the completed private
-agreement: the terms, the education certificate, and the signed
-acknowledgment.
+Needs Node.js 22 or later and the Compact toolchain 0.36.1.
 
 ```bash
 npm install
-npm run compile:fast   # compile WalletBinder (skips proving keys; `npm run compile` builds them)
-npm run demo           # run every persona through the flow
-npm test               # 47 tests, including the contract refusing each bad case on its own
+npm run compile   # about a minute: compiles the eight contracts with keys
+npm run demo      # clears a cast of wallets, checks pairs, binds policies
+npm test          # 77 tests
 ```
 
-What is real and what is simulated:
+Half of the tests call the contracts directly, skipping our own software, to
+show each contract refuses bad input on its own.
 
-| Piece | State |
+### What is real and what is simulated
+
+| Piece | Status |
 |---|---|
-| `WalletBinder` contract logic | **Real.** The compiled contract runs locally and every `assert` is enforced. |
-| Network, ZK proof generation | **Not exercised.** No transaction is submitted and no proof is generated; the local run answers "does the contract accept this?" |
-| KYCz and GeoZ | **External black boxes, test-wired.** They live in their own private repositories and are called over HTTP. For now they return synthetic answers for fictional personas. This repo contains no oracle logic, only the clients in `oracles/`. |
-| Wallet screening | **Simulated.** `demo/mock-screening-fixture.json`: twenty fictional addresses, half planted on a mock denylist. |
-| Wallet-control check | **Simulated.** A signed challenge using stand-in keys; a real integration verifies the wallet's native signature. |
-| CryptoSureEdu test | **Demo content, graded off-chain.** Placeholder questions with a public answer key; the certificate is not yet an on-chain credential. |
-| Signed acknowledgment | **Simulated keys**, same as the wallet-control check. Verified off-chain. |
-| Policy documents | **Fictional**, and never on-chain. Only the hash of the completed agreement is. |
-
-When KYCz or GeoZ refuses an applicant, CryptoSure receives a yes/no and an
-opaque reference id. The reason stays inside the oracle. Running the demo
-needs both oracle repositories checked out next to this one (see
-`oracles/oracle-endpoints.json`); without them the oracle-dependent tests
-skip and the contract-only tests still run.
-
-The contract does not know or care that the inputs are simulated. Swap in a
-real KYC issuer, a real region attestor and a live denylist feed and the
-same circuits run unchanged.
+| The eight contracts | **Real.** Compiled with full proving keys; the tests and demo run the compiled circuits. |
+| Cross-contract calls | **Real code path, run locally.** The Compact runtime executes them against local contract state. |
+| The chain | **Local stand-in.** Nothing is deployed to a Midnight network and no proofs are generated. |
+| Providers | **Mock.** Synthetic answers from `fixtures/mock-subjects.json`. |
+| Wallet signatures | **Stand-in keys.** Real signatures, checked for real, but not made by the actual wallets. |
+| The people | **Fictional**, from the public [TestTown](https://github.com/bytewizard42i/TestTownDIDz) test population. Their wallets are unfunded test addresses. |
+| Policies | **Placeholders.** No policy has been sold and none is offered. |
 
 ## Repository layout
 
 ```
 contracts/
-  WalletBinder.compact        the eligibility gate (compiles, full ZK keys)
-oracles/
-  oracle-endpoints.json       where the external KYCz / GeoZ black boxes live
-  kycz-client.mjs             asks KYCz: is this person verified?
-  geoz-client.mjs             asks GeoZ: are they in a licensed region?
-  wallet-screening.mjs        CryptoSure's own denylist check (simulated feed)
-policies/
-  policy-catalog.json         the five policies and their prerequisites
-edu/
-  cryptosure-edu.mjs          builds and grades the test for a policy
-  question-bank.json          demo questions, three per module
-sandwich/
-  bind-policy.mjs             the seven-step binding flow
-  acknowledgment.mjs          wallet-signed "I understand this agreement"
-  chain.mjs                   runs the compiled contract locally
-  encoding.mjs                hashes and commitments shared with the contract
-  wallet-control.mjs          signed-challenge wallet ownership check
-  personas.json               synthetic applicants
-  run-demo.mjs                `npm run demo`
-scripts/
-  oracle-processes.mjs        starts the oracles from their own repos
-tests/
-  sandwich.test.mjs           persona matrix, all five policies, contract-level enforcement, edu + acknowledgment
-demo/
-  mock-screening-fixture.json simulated addresses + mock KYC provider shape
-docs/pitch-resources/         one-liner, elevator pitch, paragraph, synopsis, major synopsis
-media/                        architecture diagrams
+  checks/                 the five check contracts
+  ClearanceRegistry       turns passes into one clearance
+  PairReceipt             a dated receipt for two clear wallets
+  PolicyBinder            binds a policy to a cleared wallet
+  lib/                    code shared by the contracts (roles, tickets, passes)
+  legacy/                 the first single-contract version, kept for reference
+protocol/
+  local-chain.mjs         runs the compiled contracts locally
+  program.mjs             deploys and wires the eight contracts
+  clearance.mjs           clear one wallet
+  pair-check.mjs          advise on a sender and a receiver
+  bind-policy.mjs         bind a policy to a cleared wallet
+  providers/              the provider interface and the mock providers
+  run-demo.mjs            the demo
+config/program.json       slots, profiles, cover classes, regions
+fixtures/                 synthetic answers for the mock providers
+tests/                    contract-level and protocol-level tests
+docs/                     design notes, Build Club homework, pitch resources
 ```
 
 ## See it

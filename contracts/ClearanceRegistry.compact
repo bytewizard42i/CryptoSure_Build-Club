@@ -1,0 +1,172 @@
+// ============================================================================
+// ClearanceRegistry.compact
+// "Does this ticket hold every pass this profile asks for? Then it is clear."
+// ============================================================================
+//
+// ONE JOB
+//   Turn several separate passes into one clearance. It runs no check of its
+//   own. It asks each check contract "does this ticket hold a current pass of
+//   at least level N?", and if every required one says yes, records
+//   "ticket T is clear for profile P until time X".
+//
+// WHY IT IS SEPARATE FROM THE CHECKS
+//   So checks can be added, swapped or retired without touching anything
+//   else. A check is just a contract that answers require_pass. This
+//   registry keeps a table of numbered SLOTS, each pointing at one check
+//   contract; the admin can repoint a slot at a new contract at any time.
+//
+//       slot 0  ban list            slot 3  education
+//       slot 1  region              slot 4  wallet control
+//       slot 2  identity            slots 5 to 7  free, for checks not yet invented
+//
+//   The slot numbers are a convention of whoever deploys the registry. The
+//   contract itself attaches no meaning to them.
+//
+// PROFILES
+//   A profile is a named list of minimum levels, one per slot. Level 0 means
+//   "this check is not required". Different products or cover classes point
+//   at different profiles, so "how much checking is enough" is data an admin
+//   can change, not code.
+//
+//       example   basic     [1, 1, 1, 0, 1, 0, 0, 0]
+//                 enhanced  [1, 1, 2, 3, 1, 0, 0, 0]
+//
+// ANYONE MAY CALL grant_clearance
+//   It needs no private input: passes are public, so the question "does this
+//   ticket qualify?" has a public answer. The holder usually calls it, but a
+//   helper service could, and it would learn nothing new.
+//
+// EXPIRY
+//   A clearance ends at the EARLIEST of: now + the profile's shelf life, and
+//   the expiry of each pass it relied on. A clearance can never outlive its
+//   weakest evidence.
+//
+// HOW ONE CONTRACT CALLS ANOTHER
+//   `contract Check { ... }` below declares the shape of a check contract.
+//   `checks.lookup(slot).require_pass(...)` then calls the contract deployed
+//   at the stored address, inside the same transaction, with its own proof.
+//   Reference: Compact language reference, "Contract types" and
+//   "Cross-contract calls". Needs ledger 9 and Compact toolchain 0.36.1.
+//
+// WHAT THE CHAIN SEES
+//   Ticket, profile and expiry. A profile name hints at how much checking a
+//   ticket went through. If that hint matters, use one profile for everyone.
+//
+// IDEAS, NOT BUILT
+//   - "any 2 of these 3 checks" in place of "all of them"
+//   - a fee paid when a clearance is granted (this is the natural toll point)
+//   - revoking a clearance early, for a wallet that later lands on a ban list
+//   - hiding the profile: proving "cleared for SOME profile at least this
+//     strict" without naming it
+//   - profiles that require a pass to be younger than N hours, for
+//     just-in-time checks before a large transfer
+// ============================================================================
+
+pragma language_version >= 0.28;
+
+import CompactStandardLibrary;
+
+include "lib/Common";
+
+// The shape every check contract has. See contracts/lib/Pass.compact.
+contract Check {
+  circuit require_pass(ticket: Bytes<32>, min_level: Uint<8>): Uint<64>;
+}
+
+// How much checking a profile demands.
+struct Profile {
+  minLevels: Vector<8, Uint<8>>;   // one minimum level per slot; 0 = not required
+  shelfLifeSeconds: Uint<64>;      // the longest a clearance for this profile lasts
+}
+
+// slot number -> the check contract plugged into that slot.
+export ledger checks: Map<Uint<8>, Check>;
+
+// profile id -> what it demands.
+export ledger profiles: Map<Bytes<32>, Profile>;
+
+// clearance id -> when it ends (unix seconds). Public by design.
+export ledger clearances: Map<Bytes<32>, Uint<64>>;
+
+export ledger clearanceCount: Counter;
+
+constructor() {
+  adminClaimed = false;
+}
+
+// The key a clearance is stored under: one per (ticket, profile) pair.
+export circuit derive_clearance_id(ticket: Bytes<32>, profile_id: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([
+    pad(32, "cryptosure:clearance:id:"),
+    ticket,
+    profile_id
+  ]);
+}
+
+// ADMIN: plug a check contract into a slot (or replace the one there).
+export circuit register_check(slot: Uint<8>, check: Check): [] {
+  assert_is_admin();
+  const s = disclose(slot);
+  assert(s < 8, "There are only eight slots, numbered 0 to 7");
+  checks.insert(s, disclose(check));
+}
+
+// ADMIN: create or change a profile.
+export circuit define_profile(profile_id: Bytes<32>, min_levels: Vector<8, Uint<8>>, shelf_life_seconds: Uint<64>): [] {
+  assert_is_admin();
+  const life = disclose(shelf_life_seconds);
+  assert(life > 0, "A profile's shelf life must be longer than zero");
+  profiles.insert(disclose(profile_id), Profile { minLevels: disclose(min_levels), shelfLifeSeconds: life });
+}
+
+// Asks ONE slot for its verdict. Returns the earlier of the expiry so far
+// and this slot's pass expiry. A slot that is not required changes nothing
+// and is not called at all.
+circuit earliest_after_slot(ticket: Bytes<32>, slot: Uint<8>, min_level: Uint<8>, earliest_so_far: Uint<64>): Uint<64> {
+  if (min_level == 0) {
+    return earliest_so_far;
+  }
+  assert(checks.member(slot), "This profile needs a check that is not plugged in");
+  const pass_ends = checks.lookup(slot).require_pass(ticket, min_level);
+  return pass_ends < earliest_so_far ? pass_ends : earliest_so_far;
+}
+
+// ANYONE: record that a ticket is clear for a profile.
+// `issued_at` is "now" as the caller sees it; the assert stops it being set
+// in the future, so nobody can stretch a clearance.
+export circuit grant_clearance(ticket: Bytes<32>, profile_id: Bytes<32>, issued_at: Uint<64>): Uint<64> {
+  const t = disclose(ticket);
+  const p = disclose(profile_id);
+  const now = disclose(issued_at);
+  assert(blockTimeGte(now), "issued_at is in the future");
+  assert(profiles.member(p), "There is no such profile");
+
+  const profile = profiles.lookup(p);
+  const need = profile.minLevels;
+  const by_shelf_life = (now + profile.shelfLifeSeconds) as Uint<64>;
+
+  // One line per slot, each narrowing the expiry. Written out rather than
+  // looped because each step feeds the next.
+  const e0 = earliest_after_slot(t, 0, need[0], by_shelf_life);
+  const e1 = earliest_after_slot(t, 1, need[1], e0);
+  const e2 = earliest_after_slot(t, 2, need[2], e1);
+  const e3 = earliest_after_slot(t, 3, need[3], e2);
+  const e4 = earliest_after_slot(t, 4, need[4], e3);
+  const e5 = earliest_after_slot(t, 5, need[5], e4);
+  const e6 = earliest_after_slot(t, 6, need[6], e5);
+  const valid_until = earliest_after_slot(t, 7, need[7], e6);
+
+  clearances.insert(derive_clearance_id(t, p), valid_until);
+  clearanceCount.increment(1);
+  return valid_until;
+}
+
+// THE INTERFACE OTHER CONTRACTS USE. Witness-free. Fails unless the ticket
+// is clear for the profile right now; returns when the clearance ends.
+export circuit require_clearance(ticket: Bytes<32>, profile_id: Bytes<32>): Uint<64> {
+  const id = derive_clearance_id(disclose(ticket), disclose(profile_id));
+  assert(clearances.member(id), "This ticket is not cleared for this profile");
+  const valid_until = clearances.lookup(id);
+  assert(blockTimeLt(valid_until), "This clearance has expired");
+  return valid_until;
+}

@@ -1,0 +1,65 @@
+// ============================================================================
+// lib/Ticket.compact — the clearance ticket: one handle for one holder + wallet
+// ============================================================================
+//
+// WHAT A TICKET IS
+//   A ticket is a sealed envelope containing two things: the holder's public
+//   key and the hash of the wallet being cleared. On-chain it is just 32
+//   random-looking bytes. Nobody can open it without the salt, and only the
+//   holder has the salt.
+//
+//       ticket = commit( { holderPk, walletHash }, salt )
+//
+// WHY IT EXISTS
+//   Clearance is made of several independent checks, each in its own
+//   contract. Something has to prove they were all passed by the SAME person
+//   for the SAME wallet, without saying who or which. The ticket is that
+//   something: every check contract makes the holder open the ticket inside
+//   a zero-knowledge proof, then stamps a pass against the ticket.
+//
+// WHAT AN OBSERVER LEARNS
+//   That "ticket 9f3a..." collected passes. Not the person, not the wallet.
+//   A holder who wants a fresh, unlinkable start makes a new ticket with a
+//   new salt.
+//
+// IDEAS, NOT BUILT
+//   - a ticket for a wallet held by several keys (a multi-sig), where the
+//     envelope holds a set of holder keys and a threshold
+//   - a ticket that names the network the wallet lives on, for cross-chain
+//     clearance
+// ============================================================================
+
+// What is sealed inside a ticket.
+struct TicketBody {
+  holderPk: Bytes<32>;     // derive_holder_key(holder's secret)
+  walletHash: Bytes<32>;   // hash of "chain:address"; the address never appears
+}
+
+// Private inputs from the holder's device. NEVER disclosed.
+witness get_wallet_hash(): Bytes<32>;
+witness get_ticket_salt(): Bytes<32>;
+
+// Public helper so off-chain code can compute a ticket exactly the way the
+// contracts check it.
+export circuit derive_ticket(holder_pk: Bytes<32>, wallet_hash: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<TicketBody>(
+    TicketBody { holderPk: holder_pk, walletHash: wallet_hash },
+    salt
+  );
+}
+
+// Opens the caller's ticket inside the proof and returns what was sealed in
+// it. Fails unless the caller knows the secret key, the wallet hash and the
+// salt that produce exactly `ticket`. This is how a contract knows "the
+// person presenting this ticket is the person it was made for".
+circuit open_own_ticket(ticket: Bytes<32>): TicketBody {
+  const body = TicketBody {
+    holderPk: derive_holder_key(local_secret_key()),
+    walletHash: get_wallet_hash()
+  };
+  assert(
+    disclose(persistentCommit<TicketBody>(body, get_ticket_salt()) == ticket),
+    "This ticket does not belong to the caller"
+  );
+  return body;
+}

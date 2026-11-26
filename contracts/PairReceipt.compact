@@ -1,0 +1,124 @@
+// ============================================================================
+// PairReceipt.compact
+// "Both ends of this transfer were clear at this moment. Here is the receipt."
+// ============================================================================
+//
+// ONE JOB
+//   Issue a dated receipt saying two tickets, a sender and a receiver, were
+//   both clear for a profile at the same time.
+//
+// WHAT IT IS FOR
+//   Advice before a transfer: "the wallet you are about to pay has been
+//   checked, and so have you". It does NOT touch the transfer. Nothing is
+//   held, blocked or routed through here; the sender is free to send or not.
+//
+// WHY A RECEIPT, AND NOT JUST A LOOK-UP
+//   Anyone can read the ClearanceRegistry and see two clearances. A receipt
+//   adds a fixed point in time that both parties can refer back to: "at
+//   10:42 both of us were clear". That is the evidence a later dispute, or a
+//   policy covering that transfer, would need.
+//
+// ANYONE MAY CALL issue_receipt
+//   Like grant_clearance, it uses only public facts.
+//
+// WHAT THE CHAIN SEES
+//   Two tickets appeared on one receipt. Not who they are, and nothing about
+//   the transfer itself (no amount, no asset, no address).
+//
+// IDEAS, NOT BUILT
+//   - binding the receipt to a hidden commitment of the transfer (amount,
+//     asset, time window) so cover can attach to exactly that transfer
+//   - a fee per receipt
+//   - a receipt for more than two parties (a payment split)
+//   - different profiles for sender and receiver
+// ============================================================================
+
+pragma language_version >= 0.28;
+
+import CompactStandardLibrary;
+
+include "lib/Common";
+
+// The one question this contract asks the ClearanceRegistry.
+contract Clearance {
+  circuit require_clearance(ticket: Bytes<32>, profile_id: Bytes<32>): Uint<64>;
+}
+
+struct ReceiptRecord {
+  issuedAt: Uint<64>;     // unix seconds
+  validUntil: Uint<64>;   // the receipt is stale at and after this
+}
+
+// A one-entry table holding the registry this contract trusts. A table, not
+// a fixed field, so the admin can repoint it if the registry is replaced.
+export ledger clearanceRegistry: Map<Uint<8>, Clearance>;
+
+// How long a receipt is worth relying on, in seconds.
+export ledger receiptLifeSeconds: Uint<64>;
+
+// receipt id -> record. Public by design.
+export ledger receipts: Map<Bytes<32>, ReceiptRecord>;
+
+export ledger receiptCount: Counter;
+
+constructor() {
+  adminClaimed = false;
+  receiptLifeSeconds = 900;   // fifteen minutes: long enough to send, short enough to stay true
+}
+
+export circuit derive_receipt_id(sender_ticket: Bytes<32>, receiver_ticket: Bytes<32>, profile_id: Bytes<32>, issued_at: Uint<64>): Bytes<32> {
+  return persistentHash<Vector<5, Bytes<32>>>([
+    pad(32, "cryptosure:pair:receipt:"),
+    sender_ticket,
+    receiver_ticket,
+    profile_id,
+    issued_at as Bytes<32>
+  ]);
+}
+
+// ADMIN: say which ClearanceRegistry to ask.
+export circuit set_clearance_registry(registry: Clearance): [] {
+  assert_is_admin();
+  clearanceRegistry.insert(0, disclose(registry));
+}
+
+export circuit set_receipt_life(seconds: Uint<64>): [] {
+  assert_is_admin();
+  const s = disclose(seconds);
+  assert(s > 0, "A receipt's life must be longer than zero");
+  receiptLifeSeconds = s;
+}
+
+// ANYONE: issue a receipt if both tickets are clear right now.
+export circuit issue_receipt(sender_ticket: Bytes<32>, receiver_ticket: Bytes<32>, profile_id: Bytes<32>, issued_at: Uint<64>): Bytes<32> {
+  const sender = disclose(sender_ticket);
+  const receiver = disclose(receiver_ticket);
+  const p = disclose(profile_id);
+  const now = disclose(issued_at);
+  assert(blockTimeGte(now), "issued_at is in the future");
+  assert(sender != receiver, "Sender and receiver must be different tickets");
+  assert(clearanceRegistry.member(0), "No clearance registry has been set");
+
+  const registry = clearanceRegistry.lookup(0);
+  const sender_ends = registry.require_clearance(sender, p);
+  const receiver_ends = registry.require_clearance(receiver, p);
+
+  // The receipt cannot outlive either clearance.
+  const by_life = (now + receiptLifeSeconds) as Uint<64>;
+  const first = sender_ends < receiver_ends ? sender_ends : receiver_ends;
+  const valid_until = first < by_life ? first : by_life;
+
+  const id = derive_receipt_id(sender, receiver, p, now);
+  receipts.insert(id, ReceiptRecord { issuedAt: now, validUntil: valid_until });
+  receiptCount.increment(1);
+  return id;
+}
+
+// Witness-free, for a future contract that attaches cover to a receipt.
+export circuit require_receipt(receipt_id: Bytes<32>): Uint<64> {
+  const id = disclose(receipt_id);
+  assert(receipts.member(id), "There is no such receipt");
+  const record = receipts.lookup(id);
+  assert(blockTimeLt(record.validUntil), "This receipt has gone stale");
+  return record.validUntil;
+}

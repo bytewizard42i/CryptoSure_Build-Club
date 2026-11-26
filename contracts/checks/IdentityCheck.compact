@@ -1,0 +1,108 @@
+// ============================================================================
+// CHECK 3 of 5 — IdentityCheck.compact
+// "Has an approved issuer verified this holder's identity, and how strongly?"
+// ============================================================================
+//
+// ONE JOB
+//   Hold identity credentials and revocations, and stamp a pass, at the
+//   credential's level, on the ticket of the holder it was issued to.
+//
+// WHO DOES WHAT
+//   operator  an identity issuer (a black box to us). Verifies the person
+//             off-chain and records a hidden credential here. Can revoke.
+//   holder    proves the credential is theirs, current and not revoked.
+//             Gets a pass carrying the credential's LEVEL.
+//
+// LEVELS
+//   1 = basic verification, 2 = enhanced. The pass records the level, and
+//   whoever relies on the pass says what minimum they need. This is how a
+//   larger cover class can demand stronger identity without this contract
+//   knowing anything about cover.
+//
+// WHAT THE CHAIN SEES
+//   The level reached, an expiry, and a revocation nullifier. Not the person.
+//   Two tickets backed by the same credential share that nullifier, so they
+//   are linkable to each other (not to a person).
+//
+// IDEAS, NOT BUILT
+//   - verifying the issuer's signature inside the proof, so no on-chain
+//     registration step is needed (Compact can verify a Jubjub Schnorr
+//     signature; see Midnight's ZK loan example)
+//   - proving single facts ("over 18") in place of a level
+//   - hiding the level too, by proving "level >= what you asked for"
+// ============================================================================
+
+pragma language_version >= 0.28;
+
+import CompactStandardLibrary;
+
+include "../lib/Common";
+include "../lib/Ticket";
+include "../lib/Pass";
+
+// What the issuer's hidden credential commits to.
+struct IdentityCredential {
+  holderPk: Bytes<32>;       // who it was issued to
+  level: Uint<8>;            // 1 = basic, 2 = enhanced
+  credentialId: Bytes<32>;   // random id shared by issuer and holder
+  expiresAt: Uint<64>;       // unix seconds; issuers should round this coarsely
+}
+
+export ledger credentials: HistoricMerkleTree<16, Bytes<32>>;
+export ledger revokedCredentials: Set<Bytes<32>>;
+
+witness get_identity_credential(): IdentityCredential;
+witness get_identity_credential_salt(): Bytes<32>;
+witness get_identity_credential_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+constructor() {
+  adminClaimed = false;
+  shelfLifeSeconds = 7776000;   // 90 days: identity changes slowly
+}
+
+// The value published when a credential is revoked. It is a hash of the
+// credential id under its own prefix, so it reveals nothing about the holder.
+export circuit derive_revocation_nullifier(credential_id: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:identity:revoke:"),
+    credential_id
+  ]);
+}
+
+// Public helper: seals an identity credential exactly the way the proof re-computes it, so
+// off-chain code never has to guess the byte layout.
+export circuit commit_identity_credential(body: IdentityCredential, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<IdentityCredential>(body, salt);
+}
+
+// OPERATOR: record a sealed credential.
+export circuit issue_credential(commitment: Bytes<32>): [] {
+  assert_is_operator();
+  credentials.insert(disclose(commitment));
+}
+
+// OPERATOR: revoke one. Publishes only the nullifier.
+export circuit revoke_credential(credential_id: Bytes<32>): [] {
+  assert_is_operator();
+  const nullifier = disclose(derive_revocation_nullifier(credential_id));
+  assert(!revokedCredentials.member(nullifier), "This credential is already revoked");
+  revokedCredentials.insert(nullifier);
+}
+
+// HOLDER: prove my identity credential and record its level.
+export circuit prove_identity(ticket: Bytes<32>, issued_at: Uint<64>): [] {
+  const t = disclose(ticket);
+  const sealed_in_ticket = open_own_ticket(t);
+
+  const credential = get_identity_credential();
+  assert(credential.holderPk == sealed_in_ticket.holderPk, "This identity credential belongs to someone else");
+
+  const leaf = persistentCommit<IdentityCredential>(credential, get_identity_credential_salt());
+  const root = merkleTreePathRoot<16, Bytes<32>>(get_identity_credential_path(leaf));
+  assert(credentials.checkRoot(disclose(root)), "No such identity credential");
+
+  const nullifier = disclose(derive_revocation_nullifier(credential.credentialId));
+  assert(!revokedCredentials.member(nullifier), "This identity credential has been revoked");
+
+  record_pass(t, disclose(credential.level), disclose(pass_expiry(disclose(issued_at), credential.expiresAt)));
+}

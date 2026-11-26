@@ -27,9 +27,9 @@ next milestone to an MVP that processes a transaction on pre-prod.
 ## How the MVP answers them
 
 The MVP does one thing: it **clears a wallet** against a set of checks and
-records the result on Midnight as a proof that reveals nothing about the
-holder. A cleared wallet can then be bound to a policy. Nothing in it
-intercepts, holds, or blocks a transfer.
+records the result on Midnight without revealing who the holder is. A
+cleared wallet can then be checked as one end of a transfer, or bound to a
+policy. Nothing in it intercepts, holds, or blocks a transfer.
 
 | # | Status | Answer |
 |---|---|---|
@@ -41,19 +41,19 @@ intercepts, holds, or blocks a transfer.
 | 6 | Deferred | No partnership is asked for. The intent is to show a standalone flow with real usage first. If an integration ever happens, releases would be partner-approved. That last point is our position, not something the reviewer agreed. |
 | 7 | Accepted | The milestone is exactly the reviewer's: one wallet cleared and bound, with real proofs, on pre-prod. |
 
-## Known gaps a code review will find
+## Gaps named on Nov 25, and where they stand now
 
-Stated here so nobody has to discover them.
+The MVP was rebuilt as separate contracts after this review. Status of the
+gaps listed in the first version of this page:
 
-- **The KYC level a policy requires is passed in by the caller.** The
-  contract checks the holder's level against that number but does not tie
-  the number to the policy.
-- **Wallet control is checked off-chain.** The contract proves the wallet
-  hash was cleared, not that the holder signed with that wallet.
-- **Education and the signed acknowledgment are off-chain.** The contract
-  stores a hash that commits to them and does not verify them.
-- **The demo runs the compiled contract locally.** No network deployment and
-  no generated proofs yet. Wallet signatures use stand-in keys.
+| Gap | Now |
+|---|---|
+| The identity level a policy requires was passed in by the caller | **Closed.** `PolicyBinder` reads the required profile from the ledger, and the registry reads each minimum level from the profile. |
+| Education and the signed acknowledgment were not checked by a contract | **Education closed:** it is a check contract with its own pass. **Acknowledgment unchanged:** verified off-chain; the contract stores a hash that commits to it. |
+| Wallet control was checked off-chain only | **Partly closed.** It is now a check contract, and a clearance cannot be granted without its pass. The signature itself is still verified off-chain by an operator. |
+| The demo runs the compiled contracts locally | **Unchanged.** No network deployment and no generated proofs yet. Wallet signatures use stand-in keys. |
+
+Current design and limits: [`protocol.md`](protocol.md).
 
 ## Still open
 
