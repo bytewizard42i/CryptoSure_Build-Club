@@ -1,0 +1,17 @@
+# Nothing secret or machine-specific may be committed from deploy/.
+.env
+.env.*
+!.env.example
+node_modules/
+# Local wallet / private-state databases and sync caches
+.local-state/
+midnight-level-db/
+*.level/
+# Copies of the compiled contracts made by src/compiled-contracts.mjs
+.compiled-contracts/
+# Logs
+logs/
+*.log
+# The record of the throwaway local rehearsal chain means nothing to anyone else
+deployments/local.json
+deployments/*.tmp

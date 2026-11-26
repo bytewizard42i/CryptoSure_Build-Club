@@ -67,7 +67,7 @@ export class ContractsNotCompiledError extends Error {}
 // hand the circuit a made-up path. It hashes to a root the ledger has never
 // seen, so the CONTRACT is what says no. That keeps the refusal where it
 // belongs and lets tests prove the contract enforces it.
-function findPathOrDecoy(tree, leaf, treeDepth) {
+export function findPathOrDecoy(tree, leaf, treeDepth) {
   return tree.findPathForLeaf(leaf) ?? {
     leaf,
     path: Array.from({ length: treeDepth }, () => ({ sibling: { field: 0n }, goes_left: false }))
@@ -81,7 +81,7 @@ function findPathOrDecoy(tree, leaf, treeDepth) {
 // declared. Nothing returned here is written on-chain unless the contract
 // explicitly discloses it.
 // ---------------------------------------------------------------------------
-const WITNESSES = {
+export const WITNESSES = {
   // lib/Common
   local_secret_key: ({ privateState }) => [privateState, privateState.secretKey],
   // lib/Ticket

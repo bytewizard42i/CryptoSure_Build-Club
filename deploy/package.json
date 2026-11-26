@@ -1,0 +1,39 @@
+{
+  "name": "cryptosure-deploy",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Network deployment tooling for the CryptoSure Build Club contracts (Midnight Preview, real zero-knowledge proofs). Kept separate so the root package stays dependency-light.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-js": "3.0.2",
+    "@midnight-ntwrk/compact-runtime": "0.21.0",
+    "@midnight-ntwrk/midnight-js": "5.0.1",
+    "@midnight-ntwrk/midnight-js-bundled-contract-module-provider": "5.0.1",
+    "@midnight-ntwrk/midnight-js-contracts": "5.0.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.1",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.1",
+    "@midnight-ntwrk/midnight-js-types": "5.0.1",
+    "@midnight-ntwrk/midnight-js-utils": "5.0.1",
+    "@midnightntwrk/dapp-connector-api": "4.1.0",
+    "@midnightntwrk/ledger-v9": "1.0.2",
+    "@midnightntwrk/wallet-sdk": "2.0.1"
+  },
+  "scripts": {
+    "check-address": "node --env-file-if-exists=.env src/check-address.mjs",
+    "status": "node --env-file-if-exists=.env src/check-status.mjs",
+    "deploy": "node --env-file-if-exists=.env src/deploy-program.mjs",
+    "clearance": "node --env-file-if-exists=.env src/run-one-clearance.mjs",
+    "test": "node --test \"tests/*.test.mjs\"",
+    "local:up": "docker compose -f local-network/compose.yml up -d --wait",
+    "local:down": "docker compose -f local-network/compose.yml down --volumes && node -e \"for (const p of ['deployments/local.json', '.local-state/local']) require('node:fs').rmSync(p, { recursive: true, force: true })\"",
+    "deploy:first": "node --env-file-if-exists=.env src/deploy-program.mjs --only-first"
+  },
+  "devDependencies": {
+    "@noble/curves": "2.4.0"
+  }
+}

@@ -1,0 +1,80 @@
+# ============================================================================
+# local-network/compose.yml — a private Midnight chain on this computer
+# ============================================================================
+# WHAT THIS IS
+#   A one-node Midnight chain plus its indexer, running in Docker, for
+#   REHEARSING a deployment. It is the same node and indexer software the
+#   public networks run (versions from Midnight's compatibility matrix), in
+#   "dev" mode: blocks are produced locally and a well-known test wallet is
+#   funded at genesis, so no faucet is needed. Zero-knowledge proofs are REAL.
+#
+# WHAT IT IS NOT
+#   A public network. Nothing deployed here exists anywhere else, and all of
+#   it is erased when the containers are removed.
+#
+# HOW TO USE (from the deploy/ folder)
+#   npm run local:up        start node + indexer (waits until healthy)
+#   npm run deploy -- --network local
+#   npm run local:down      stop and erase the local chain
+#
+# The proof server is NOT in this file: the same cryptosure-proof-server
+# container (port 6300) serves every network.
+#
+# Both ports are bound to 127.0.0.1, so nothing is reachable from outside
+# this computer. The passwords and "secret" below are the public example
+# values for a throwaway local indexer; they protect nothing.
+#
+# Source: adapted from the ledger-9 counter example's compose file
+# (utils_midskills/templates/counter-dapp/compose.yml).
+# ============================================================================
+name: cryptosure-local-network
+
+services:
+  node:
+    image: 'midnightntwrk/midnight-node:2.1.101'
+    container_name: 'cryptosure-local-node'
+    ports:
+      - '127.0.0.1:9944:9944'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9944/health']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    environment:
+      # "dev" preset: a single local block producer with a funded genesis wallet.
+      CFG_PRESET: 'dev'
+      SIDECHAIN_BLOCK_BENEFICIARY: '04bcf7ad3be7a5c790460be82a713af570f22e0f801f6659ab8e84a52be6969e'
+
+  indexer:
+    image: 'midnightntwrk/indexer-standalone:4.4.101'
+    container_name: 'cryptosure-local-indexer'
+    ports:
+      - '127.0.0.1:8088:8088'
+    environment:
+      RUST_LOG: 'indexer=info,chain_indexer=info,indexer_api=info,wallet_indexer=info,indexer_common=info,fastrace_opentelemetry=off,info'
+      APP__INFRA__NODE__URL: 'ws://node:9944'
+      APP__APPLICATION__NETWORK_ID: 'undeployed'
+      APP__INFRA__STORAGE__PASSWORD: 'indexer'
+      APP__INFRA__PUB_SUB__PASSWORD: 'indexer'
+      APP__INFRA__LEDGER_STATE_STORAGE__PASSWORD: 'indexer'
+      APP__INFRA__SECRET: '303132333435363738393031323334353637383930313233343536373839303132'
+      # Indexer 4.4.101 refuses to start without this field (error seen:
+      # "missing field `blockfrost_id` for key default.infra.spo_node"). It is
+      # for looking up Cardano stake-pool data, which a local dev chain does
+      # not have, so a placeholder is enough.
+      APP__INFRA__SPO_NODE__BLOCKFROST_ID: 'not-used-on-a-local-chain'
+      # The stake-pool part of the indexer also connects to the node. Its
+      # default is ws://localhost:9944, which inside this container is the
+      # indexer itself; left unset, the indexer exits after about five minutes
+      # ("spo-indexer exited with ERROR ... Connection refused").
+      APP__INFRA__SPO_NODE__URL: 'ws://node:9944'
+    healthcheck:
+      test: ['CMD-SHELL', 'cat /var/run/indexer-standalone/running']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    depends_on:
+      node:
+        condition: service_healthy
