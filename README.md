@@ -90,6 +90,7 @@ npm install
 npm run compile   # about a minute: compiles the eight contracts with keys
 npm run demo      # clears a cast of wallets, checks pairs, binds policies
 npm test          # 93 tests
+cd deploy && npm test   # 28 more: network deployment tooling and real wallet signatures
 ```
 
 Most of the tests call the contracts directly, skipping our own software, to
@@ -102,9 +103,9 @@ device that lies to the contracts about its private inputs.
 |---|---|
 | The eight contracts | **Real.** Compiled with full proving keys; the tests and demo run the compiled circuits. |
 | Cross-contract calls | **Real code path, run locally.** The Compact runtime executes them against local contract state. |
-| The chain | **Local stand-in.** Nothing is deployed to a Midnight network and no proofs are generated. |
+| The chain | **Local stand-in** here; `deploy/` deploys to a real network. The full deployment was rehearsed with real proofs on a local chain. Preview deployment is waiting on faucet funding. |
 | Providers | **Mock.** Synthetic answers from `fixtures/mock-subjects.json`. |
-| Wallet signatures | **Stand-in keys.** Real signatures, checked for real, but not made by the actual wallets. |
+| Wallet signatures | **Real format, new code.** `deploy/src/midnight-wallet-signer.mjs` makes and checks genuine Midnight BIP-340 Schnorr signatures. Untested against a real browser wallet. |
 | The people | **Fictional**, from the public [TestTown](https://github.com/bytewizard42i/TestTownDIDz) test population. Their wallets are unfunded test addresses. |
 | Policies | **Placeholders.** No policy has been sold and none is offered. |
 
@@ -129,6 +130,7 @@ protocol/
 config/program.json       slots, profiles, cover classes, regions
 fixtures/                 synthetic answers for the mock providers
 tests/                    contract-level and protocol-level tests
+deploy/                   network deployment tooling and real wallet signatures (see its own README)
 docs/                     design notes, Build Club homework, pitch resources
 ```
 
