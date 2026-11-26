@@ -2,3 +2,6 @@ build/
 node_modules/
 *.prover
 *.verifier
+
+# Full-quality media originals stay local (see scripts/save-media.py)
+originals/

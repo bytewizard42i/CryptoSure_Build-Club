@@ -33,6 +33,8 @@ two ways:
   The answer is advice. Nothing is held, blocked, or routed through us.
 - **Bind a policy.** A cleared wallet can be bound to an insurance policy.
 
+![Private wallet clearance on Midnight: five checks feed one clearance, which is used to advise on a transfer or to bind a policy](media/cryptosure-clearance-public-v1.webp)
+
 ### One contract per job
 
 Each check is its own contract, and so is each use of a clearance. Any one
