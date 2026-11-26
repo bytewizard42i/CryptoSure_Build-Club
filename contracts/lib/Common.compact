@@ -86,21 +86,25 @@ circuit install_first_admin(admin_key: Bytes<32>): [] {
   adminCount = 1;
 }
 
-export circuit add_admin(admin_key: Bytes<32>): [] {
+// add_admin and remove_admin are ONE circuit with a selector, not two.
+// Every exported impure circuit costs a verifier key in the deployment
+// transaction, and the chain allows only ~32 KB of writes per transaction
+// (see deploy/THROTTLE.md). This merge and its twin in lib/Operator are
+// what keep even the largest contract under that ceiling. The rules are
+// unchanged: only an admin may call it, an admin cannot be added twice,
+// and the last admin cannot be removed, or the contract could never be
+// configured again.
+export circuit set_admin(admin_key: Bytes<32>, enabled: Boolean): [] {
   assert_is_admin();
   const k = disclose(admin_key);
-  assert(!admins.member(k), "That key is already an admin");
-  admins.insert(k);
-  adminCount = (adminCount + 1) as Uint<64>;
-}
-
-// Remove an admin, for example after a key is lost or leaked. The last admin
-// cannot be removed, or the contract could never be configured again.
-export circuit remove_admin(admin_key: Bytes<32>): [] {
-  assert_is_admin();
-  const k = disclose(admin_key);
-  assert(admins.member(k), "That key is not an admin");
-  assert(adminCount > 1, "The last admin cannot be removed");
-  admins.remove(k);
-  adminCount = (adminCount - 1) as Uint<64>;
+  if (disclose(enabled)) {
+    assert(!admins.member(k), "That key is already an admin");
+    admins.insert(k);
+    adminCount = (adminCount + 1) as Uint<64>;
+  } else {
+    assert(admins.member(k), "That key is not an admin");
+    assert(adminCount > 1, "The last admin cannot be removed");
+    admins.remove(k);
+    adminCount = (adminCount - 1) as Uint<64>;
+  }
 }

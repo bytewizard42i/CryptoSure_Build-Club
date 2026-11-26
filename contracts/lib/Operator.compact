@@ -47,12 +47,14 @@ circuit assert_is_admin_or_operator(): [] {
          );
 }
 
-export circuit add_operator(operator_key: Bytes<32>): [] {
+// Merged for the same reason as set_admin (see lib/Common.compact): one
+// verifier key saved per contract, which is deploy-transaction headroom.
+export circuit set_operator(operator_key: Bytes<32>, enabled: Boolean): [] {
   assert_is_admin();
-  operators.insert(disclose(operator_key));
-}
-
-export circuit remove_operator(operator_key: Bytes<32>): [] {
-  assert_is_admin();
-  operators.remove(disclose(operator_key));
+  const k = disclose(operator_key);
+  if (disclose(enabled)) {
+    operators.insert(k);
+  } else {
+    operators.remove(k);
+  }
 }

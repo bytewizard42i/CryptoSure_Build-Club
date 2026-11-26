@@ -89,7 +89,7 @@ export async function deployProgram(programConfig, options = {}) {
   const slots = Object.fromEntries(namedEntries(programConfig.slots));
   for (const checkName of CHECK_NAMES) {
     const checkAddress = addresses[CHECK_CONTRACTS[checkName]];
-    await chain.call(checkAddress, admin, 'add_operator', roleKeyOf(operators[checkName]));
+    await chain.call(checkAddress, admin, 'set_operator', roleKeyOf(operators[checkName]), true);
     await chain.call(addresses.ClearanceRegistry, admin, 'register_check', BigInt(slots[checkName]), LocalChain.contractReference(checkAddress));
   }
 

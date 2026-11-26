@@ -1,0 +1,37 @@
+{
+  "network": "preview",
+  "createdAt": "2026-11-26T16:44:52.999Z",
+  "updatedAt": "2026-11-26T16:45:14.452Z",
+  "deployerAddress": "mn_addr_preview17jsz4gpr2t3qsw3nmw2hert4tc0ltu84d86lnc45rjgv4cp8muwsxqpqgh",
+  "versions": {
+    "compactCompiler": "0.36.1",
+    "compactLanguage": "0.28.0",
+    "compactRuntime": "0.21.0",
+    "proofServer": "9.0.2",
+    "packages": {
+      "@midnight-ntwrk/compact-js": "3.0.2",
+      "@midnight-ntwrk/compact-runtime": "0.21.0",
+      "@midnight-ntwrk/midnight-js": "5.0.1",
+      "@midnight-ntwrk/midnight-js-bundled-contract-module-provider": "5.0.1",
+      "@midnight-ntwrk/midnight-js-contracts": "5.0.1",
+      "@midnight-ntwrk/midnight-js-http-client-proof-provider": "5.0.1",
+      "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "5.0.1",
+      "@midnight-ntwrk/midnight-js-level-private-state-provider": "5.0.1",
+      "@midnight-ntwrk/midnight-js-node-zk-config-provider": "5.0.1",
+      "@midnight-ntwrk/midnight-js-types": "5.0.1",
+      "@midnight-ntwrk/midnight-js-utils": "5.0.1",
+      "@midnightntwrk/dapp-connector-api": "4.1.0",
+      "@midnightntwrk/ledger-v9": "1.0.2",
+      "@midnightntwrk/wallet-sdk": "2.0.1"
+    }
+  },
+  "contracts": {
+    "BanListCheck": {
+      "address": "f3f4e8d37ab331a5469e7bb300b1f40d48c92e4c06def71662283fa3c49795ff",
+      "deployTransactionId": "00b47b9d0ea7c2f90dbdb707cd3c1a4616a955f25420e5da495acb2ec5efd78d64",
+      "blockHeight": 282488,
+      "deployedAt": "2026-11-26T16:45:14.451Z"
+    }
+  },
+  "wiringSteps": {}
+}

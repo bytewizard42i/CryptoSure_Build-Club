@@ -50,20 +50,20 @@ describe('roles: only the right party can feed or configure a contract', () => {
     const fresh = await program.chain.deploy('BanListCheck', program.roleKeyOf(program.admin));
     assert.equal(program.chain.publicLedger(fresh).admins.member(program.roleKeyOf(program.admin)), true);
     await assert.rejects(program.chain.call(fresh, stranger, 'claim_admin'), /no circuit named "claim_admin"/);
-    await refuses(program.chain.call(fresh, stranger, 'add_operator', program.roleKeyOf(stranger)), /not an admin/);
+    await refuses(program.chain.call(fresh, stranger, 'set_operator', program.roleKeyOf(stranger), true), /not an admin/);
   });
 
   test('an admin can be added and removed, but the last admin cannot be removed', async () => {
     const program = await freshProgram();
     const registry = program.addresses.ClearanceRegistry;
     const second = { secretKey: deriveDemoSecretKey('second-admin') };
-    await refuses(program.chain.call(registry, program.admin, 'remove_admin', program.roleKeyOf(program.admin)), /last admin cannot be removed/);
-    await program.chain.call(registry, program.admin, 'add_admin', program.roleKeyOf(second));
-    await refuses(program.chain.call(registry, program.admin, 'add_admin', program.roleKeyOf(second)), /already an admin/);
+    await refuses(program.chain.call(registry, program.admin, 'set_admin', program.roleKeyOf(program.admin), false), /last admin cannot be removed/);
+    await program.chain.call(registry, program.admin, 'set_admin', program.roleKeyOf(second), true);
+    await refuses(program.chain.call(registry, program.admin, 'set_admin', program.roleKeyOf(second), true), /already an admin/);
     // The new admin removes the old one (for example after a key leak).
-    await program.chain.call(registry, second, 'remove_admin', program.roleKeyOf(program.admin));
+    await program.chain.call(registry, second, 'set_admin', program.roleKeyOf(program.admin), false);
     await refuses(program.chain.call(registry, program.admin, 'define_profile', padTo32Bytes('x'), minLevelsVector(program.slots, { banList: 1 }), 60n), /not an admin/);
-    await refuses(program.chain.call(registry, stranger, 'remove_admin', program.roleKeyOf(second)), /not an admin/);
+    await refuses(program.chain.call(registry, stranger, 'set_admin', program.roleKeyOf(second), false), /not an admin/);
   });
 });
 

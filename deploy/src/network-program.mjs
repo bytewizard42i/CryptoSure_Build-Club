@@ -93,8 +93,8 @@ export function listWiringSteps(programConfig, { roleKeyOf, operators }) {
     steps.push({
       id: `add-operator:${checkName}`,
       contractName: checkContract,
-      circuitName: 'add_operator',
-      buildArguments: () => [roleKeyOf(operators[checkName])]
+      circuitName: 'set_operator',
+      buildArguments: () => [roleKeyOf(operators[checkName]), true]
     });
     steps.push({
       id: `register-check:${checkName}`,
