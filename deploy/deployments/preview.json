@@ -1,7 +1,7 @@
 {
   "network": "preview",
   "createdAt": "2026-11-26T16:44:52.999Z",
-  "updatedAt": "2026-11-26T16:45:14.452Z",
+  "updatedAt": "2026-11-26T18:31:09.565Z",
   "deployerAddress": "mn_addr_preview17jsz4gpr2t3qsw3nmw2hert4tc0ltu84d86lnc45rjgv4cp8muwsxqpqgh",
   "versions": {
     "compactCompiler": "0.36.1",
@@ -27,11 +27,190 @@
   },
   "contracts": {
     "BanListCheck": {
-      "address": "f3f4e8d37ab331a5469e7bb300b1f40d48c92e4c06def71662283fa3c49795ff",
-      "deployTransactionId": "00b47b9d0ea7c2f90dbdb707cd3c1a4616a955f25420e5da495acb2ec5efd78d64",
-      "blockHeight": 282488,
-      "deployedAt": "2026-11-26T16:45:14.451Z"
+      "address": "b09dbb17d12868ba4f322bc1ab0cc5f3728c3983b4f39c1e6f5ef525e2917f12",
+      "deployTransactionId": "00885636193eb30fc1afd9457248578223cb0d4d5baeaf4181d95e51fca47553a4",
+      "blockHeight": 282899,
+      "deployedAt": "2026-11-26T17:26:20.109Z"
+    },
+    "RegionCheck": {
+      "address": "a5474117788147dafb3744b900454044b8f67e7f9c9bbf927223234546f2f135",
+      "deployTransactionId": "00bf02bd81e30f0eb9c41c719800a3fe8750a94a8d470b0bfd7a387b44cc5e751d",
+      "blockHeight": 282902,
+      "deployedAt": "2026-11-26T17:26:38.667Z"
+    },
+    "IdentityCheck": {
+      "address": "1690fc29599efa7143394ad4f706bdf6a13f0f4883ad59601ab57aadaef7d314",
+      "deployTransactionId": "0049886781e78f32d7efab118dcfbc95e5db22fd75a916c0a2daebfe4784ba0713",
+      "blockHeight": 282905,
+      "deployedAt": "2026-11-26T17:26:56.068Z"
+    },
+    "EducationCheck": {
+      "address": "bbeebe0a102f74bcd5aed432536aa993cc4db58ee21b98368da2d23d1c240f1d",
+      "deployTransactionId": "00aec9b58c49972756cea386605317b60f20da3e0f83a4ab5697e8fccb08bd574b",
+      "blockHeight": 282908,
+      "deployedAt": "2026-11-26T17:27:14.747Z"
+    },
+    "WalletControlCheck": {
+      "address": "1355917fc6bfdb9b2b32e441cec30bd575899043d1b4982fb50366d285c511de",
+      "deployTransactionId": "00a529dc280eadc5997e40eb5c2a4c8e811bb8797e95f16de9814c5c29b4deb8dd",
+      "blockHeight": 282911,
+      "deployedAt": "2026-11-26T17:27:32.259Z"
+    },
+    "ClearanceRegistry": {
+      "address": "ccb71b10cf1b2ba556d50eea0246050e24f2261dc23a11e19d5c2178c921a484",
+      "deployTransactionId": "00038cc23d056b7b2b70107bf0781436c8b57a7aa7ba81eef8c0708006ced67e45",
+      "blockHeight": 282914,
+      "deployedAt": "2026-11-26T17:27:50.768Z"
+    },
+    "PairReceipt": {
+      "address": "ca9a4f9f10b9f1c293f55f54dbdd4e64e41b629ddc5f8063fe24eb54e8625b6b",
+      "deployTransactionId": "009c6668e43b9d74023b3e8a9bbbf9144acae60f7f7df1a9a526107e541f741de6",
+      "blockHeight": 282917,
+      "deployedAt": "2026-11-26T17:28:08.156Z"
+    },
+    "PolicyBinder": {
+      "address": "bc17b0d32f919230083b1e5a634911b4754a6ec63f657620f95668f262d10a57",
+      "deployTransactionId": "005ae6efb9c07c6ec4b9e97de4ffc1929084a82717b84042bc10063bc81febbb96",
+      "blockHeight": 282920,
+      "deployedAt": "2026-11-26T17:28:26.933Z"
     }
   },
-  "wiringSteps": {}
+  "wiringSteps": {
+    "add-operator:banList": {
+      "contract": "BanListCheck",
+      "circuit": "set_operator",
+      "transactionId": "006448a27089519fba9e513683e6b594a6a7f2f08cc85fd42dcfcd179434372187",
+      "blockHeight": 282924,
+      "completedAt": "2026-11-26T17:28:51.555Z"
+    },
+    "register-check:banList": {
+      "contract": "ClearanceRegistry",
+      "circuit": "register_check",
+      "transactionId": "0040418c90ce90fd5efa1fb7ae06316e0722492641ee85a4063ec4e9d85fdb7fef",
+      "blockHeight": 282928,
+      "completedAt": "2026-11-26T17:29:15.634Z"
+    },
+    "add-operator:region": {
+      "contract": "RegionCheck",
+      "circuit": "set_operator",
+      "transactionId": "00445f4dc1ccf34c925034c56aa6feac151f01537f4314582c94511365211a7124",
+      "blockHeight": 282932,
+      "completedAt": "2026-11-26T17:29:39.548Z"
+    },
+    "register-check:region": {
+      "contract": "ClearanceRegistry",
+      "circuit": "register_check",
+      "transactionId": "0010f0e7edcb7c5d6c279b3bc248b36dcd47380f5cef3ce7763ca4e95b4c1396ce",
+      "blockHeight": 282936,
+      "completedAt": "2026-11-26T17:30:03.589Z"
+    },
+    "add-operator:identity": {
+      "contract": "IdentityCheck",
+      "circuit": "set_operator",
+      "transactionId": "009469ef6ee882979eba3b0a22bde45c072849703f8910f50fb59bb14b22078897",
+      "blockHeight": 282940,
+      "completedAt": "2026-11-26T17:30:27.675Z"
+    },
+    "register-check:identity": {
+      "contract": "ClearanceRegistry",
+      "circuit": "register_check",
+      "transactionId": "00f8418d5a87c5545ec9ef2abd64231b46c4df6752fda932566c277b6a9ef84d62",
+      "blockHeight": 282944,
+      "completedAt": "2026-11-26T17:30:51.679Z"
+    },
+    "add-operator:education": {
+      "contract": "EducationCheck",
+      "circuit": "set_operator",
+      "transactionId": "0034ea2d3621ba12ce30b008b001cca3956de305d9a6cab20443994d83b85e33c1",
+      "blockHeight": 283498,
+      "completedAt": "2026-11-26T18:26:14.619Z"
+    },
+    "register-check:education": {
+      "contract": "ClearanceRegistry",
+      "circuit": "register_check",
+      "transactionId": "00f56c551bb81b753af5ae118d22b063434be7d9b4841f300089e658d82968afd9",
+      "blockHeight": 283501,
+      "completedAt": "2026-11-26T18:26:33.241Z"
+    },
+    "add-operator:walletControl": {
+      "contract": "WalletControlCheck",
+      "circuit": "set_operator",
+      "transactionId": "002cdcf7bd06aa148ab09e9f00fc2472a8b768fb3e669f34783ef92f4ec357aa0f",
+      "blockHeight": 283505,
+      "completedAt": "2026-11-26T18:26:57.353Z"
+    },
+    "register-check:walletControl": {
+      "contract": "ClearanceRegistry",
+      "circuit": "register_check",
+      "transactionId": "00235d978e891faed9fda2fa740464c5a57ac7068f95183ab84803864941b1101c",
+      "blockHeight": 283509,
+      "completedAt": "2026-11-26T18:27:21.345Z"
+    },
+    "define-profile:basic": {
+      "contract": "ClearanceRegistry",
+      "circuit": "define_profile",
+      "transactionId": "00e01ba9db9737c2c0bb731d00e01ce59b7d4c3e454d60a448c65c98a8255d35ad",
+      "blockHeight": 283513,
+      "completedAt": "2026-11-26T18:27:45.347Z"
+    },
+    "define-profile:standard": {
+      "contract": "ClearanceRegistry",
+      "circuit": "define_profile",
+      "transactionId": "0030a1dc80c3d7e5d759eeda3c97898c0753b98eed5eb211e06cfdf5bdf419699c",
+      "blockHeight": 283517,
+      "completedAt": "2026-11-26T18:28:09.636Z"
+    },
+    "define-profile:enhanced": {
+      "contract": "ClearanceRegistry",
+      "circuit": "define_profile",
+      "transactionId": "007790284f742e8b53644b59868578c893e6519f72da6831be72e90c73e6083c51",
+      "blockHeight": 283521,
+      "completedAt": "2026-11-26T18:28:33.438Z"
+    },
+    "add-allowed-region:REGION-A": {
+      "contract": "RegionCheck",
+      "circuit": "add_allowed_region",
+      "transactionId": "004f3b92650c3f66b7a3df74b570f18355a5f39e1be500f3bcc89eb58df8b4038e",
+      "blockHeight": 283526,
+      "completedAt": "2026-11-26T18:29:02.775Z"
+    },
+    "add-allowed-region:REGION-B": {
+      "contract": "RegionCheck",
+      "circuit": "add_allowed_region",
+      "transactionId": "007e85bf416d246404eee9acab625fcf43f5ae0ff1f8359bbf949dbb876305a564",
+      "blockHeight": 283530,
+      "completedAt": "2026-11-26T18:29:27.164Z"
+    },
+    "set-clearance-registry:PolicyBinder": {
+      "contract": "PolicyBinder",
+      "circuit": "set_clearance_registry",
+      "transactionId": "00fff43fc2d1699dbce7238aa25f11e205cf8edbdf79cc5995157feab1548be6cd",
+      "blockHeight": 283534,
+      "completedAt": "2026-11-26T18:29:50.769Z"
+    },
+    "set-clearance-registry:PairReceipt": {
+      "contract": "PairReceipt",
+      "circuit": "set_clearance_registry",
+      "transactionId": "008df312fbae88f7c869dc6e25ff184252b7a951d333d151fde45580911b587593",
+      "blockHeight": 283539,
+      "completedAt": "2026-11-26T18:30:21.497Z"
+    },
+    "define-cover-class:cover-standard": {
+      "contract": "PolicyBinder",
+      "circuit": "define_cover_class",
+      "transactionId": "00083cfa1b3ecb7f1106bd2e0c12a4522fe359d38df4b2b248409264b35eb5e2c9",
+      "blockHeight": 283543,
+      "completedAt": "2026-11-26T18:30:45.578Z"
+    },
+    "define-cover-class:cover-enhanced": {
+      "contract": "PolicyBinder",
+      "circuit": "define_cover_class",
+      "transactionId": "00c459fdd3e8009eccc2aa0a2913a15cee0812bd842c7444a198a5c953e92662ca",
+      "blockHeight": 283547,
+      "completedAt": "2026-11-26T18:31:09.565Z"
+    }
+  },
+  "notes": [
+    "BanListCheck deployment f3f4e8d3... superseded by circuit-merge recompile (Nov 26): old instance orphaned on-chain, redeploying fresh with set_admin/set_operator key set."
+  ]
 }
