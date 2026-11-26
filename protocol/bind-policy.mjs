@@ -62,10 +62,14 @@ export async function bindPolicy(program, providers, holder, { coverClass, polic
   const bindingState = { ...holder.privateState, bindingSalt: random32Bytes() };
   const binder = program.addresses.PolicyBinder;
 
-  let bindingCommitment;
+  // The holder's device works out its own binding commitment. The contract
+  // computes the same value and stores it, but does not hand it back.
+  const bindingCommitment = program.chain.pureCircuits(binder).commit_binding(
+    { holderPk: holder.holderPublicKey, walletHash: holder.privateState.walletHash, policyRef, coverClass: padTo32Bytes(coverClass) },
+    bindingState.bindingSalt
+  );
   try {
-    const bound = await program.chain.call(binder, bindingState, 'bind_policy', holder.ticket, padTo32Bytes(coverClass), policyRef);
-    bindingCommitment = bound.result;
+    await program.chain.call(binder, bindingState, 'bind_policy', holder.ticket, padTo32Bytes(coverClass), policyRef);
   } catch (error) {
     if (!(error instanceof ContractRejectedError)) throw error;
     return stop('bind-policy', `The contract refused the binding: ${error.message}`);
@@ -88,6 +92,6 @@ export async function bindPolicy(program, providers, holder, { coverClass, polic
       totalBindingsOnLedger: Number(program.chain.publicLedger(binder).bindingCount)
     },
     // Kept by the HOLDER (and the insurer). Never on-chain.
-    holderRecord: { policyDocument, policyRef, bindingState }
+    holderRecord: { policyDocument, policyRef, bindingState, bindingCommitment }
   };
 }

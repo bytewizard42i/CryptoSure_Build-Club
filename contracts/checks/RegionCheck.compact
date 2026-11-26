@@ -31,6 +31,7 @@ import CompactStandardLibrary;
 include "../lib/Common";
 include "../lib/Ticket";
 include "../lib/Pass";
+include "../lib/Membership";
 
 // What the region oracle's hidden attestation commits to.
 struct RegionAttestation {
@@ -47,8 +48,9 @@ witness get_region_attestation_salt(): Bytes<32>;
 witness get_region_attestation_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 witness get_allowed_region_path(leaf: Bytes<32>): MerkleTreePath<8, Bytes<32>>;
 
-constructor() {
-  adminClaimed = false;
+// `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
+constructor(first_admin: Bytes<32>) {
+  install_first_admin(first_admin);
   shelfLifeSeconds = 2592000;   // 30 days: people move, but not daily
 }
 
@@ -88,10 +90,10 @@ export circuit prove_in_region(ticket: Bytes<32>, issued_at: Uint<64>): [] {
   assert(attestation.holderPk == sealed_in_ticket.holderPk, "This region attestation is about someone else");
 
   const leaf = persistentCommit<RegionAttestation>(attestation, get_region_attestation_salt());
-  const root = merkleTreePathRoot<16, Bytes<32>>(get_region_attestation_path(leaf));
+  const root = root_for_leaf_16(leaf, get_region_attestation_path(leaf));
   assert(attestations.checkRoot(disclose(root)), "No such region attestation");
 
-  const allowed_root = merkleTreePathRoot<8, Bytes<32>>(get_allowed_region_path(attestation.regionLeaf));
+  const allowed_root = root_for_leaf_8(attestation.regionLeaf, get_allowed_region_path(attestation.regionLeaf));
   assert(allowedRegions.checkRoot(disclose(allowed_root)), "The attested region is not one this program serves");
 
   record_pass(t, 1, disclose(pass_expiry(disclose(issued_at), attestation.expiresAt)));

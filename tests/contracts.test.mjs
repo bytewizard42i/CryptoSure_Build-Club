@@ -37,14 +37,30 @@ describe('roles: only the right party can feed or configure a contract', () => {
   test('a stranger cannot define a profile, plug in a check, or define a cover class', async () => {
     const program = await freshProgram();
     const registry = program.addresses.ClearanceRegistry;
-    await refuses(program.chain.call(registry, stranger, 'define_profile', padTo32Bytes('free-pass'), minLevelsVector(program.slots, {}), 1000n), /not an admin/);
+    await refuses(program.chain.call(registry, stranger, 'define_profile', padTo32Bytes('free-pass'), minLevelsVector(program.slots, { banList: 1 }), 1000n), /not an admin/);
     await refuses(program.chain.call(registry, stranger, 'register_check', 0n, LocalChain.contractReference(program.checkAddress('education'))), /not an admin/);
     await refuses(program.chain.call(program.addresses.PolicyBinder, stranger, 'define_cover_class', padTo32Bytes('cover-standard'), padTo32Bytes('basic')), /not an admin/);
   });
 
-  test('the admin role can only be claimed once', async () => {
+  test('a freshly deployed contract already has its admin; there is nothing for a stranger to claim', async () => {
     const program = await freshProgram();
-    await refuses(program.chain.call(program.addresses.ClearanceRegistry, stranger, 'claim_admin'), /already claimed/);
+    const fresh = await program.chain.deploy('BanListCheck', program.roleKeyOf(program.admin));
+    assert.equal(program.chain.publicLedger(fresh).admins.member(program.roleKeyOf(program.admin)), true);
+    await assert.rejects(program.chain.call(fresh, stranger, 'claim_admin'), /no circuit named "claim_admin"/);
+    await refuses(program.chain.call(fresh, stranger, 'add_operator', program.roleKeyOf(stranger)), /not an admin/);
+  });
+
+  test('an admin can be added and removed, but the last admin cannot be removed', async () => {
+    const program = await freshProgram();
+    const registry = program.addresses.ClearanceRegistry;
+    const second = { secretKey: deriveDemoSecretKey('second-admin') };
+    await refuses(program.chain.call(registry, program.admin, 'remove_admin', program.roleKeyOf(program.admin)), /last admin cannot be removed/);
+    await program.chain.call(registry, program.admin, 'add_admin', program.roleKeyOf(second));
+    await refuses(program.chain.call(registry, program.admin, 'add_admin', program.roleKeyOf(second)), /already an admin/);
+    // The new admin removes the old one (for example after a key leak).
+    await program.chain.call(registry, second, 'remove_admin', program.roleKeyOf(program.admin));
+    await refuses(program.chain.call(registry, program.admin, 'define_profile', padTo32Bytes('x'), minLevelsVector(program.slots, { banList: 1 }), 60n), /not an admin/);
+    await refuses(program.chain.call(registry, stranger, 'remove_admin', program.roleKeyOf(second)), /not an admin/);
   });
 });
 
@@ -172,6 +188,33 @@ describe('ClearanceRegistry: a clearance needs every pass the profile asks for',
     await refuses(grant(program, holder.ticket, 'no-such-profile'), /no such profile/);
   });
 
+  test('a stranger cannot shorten or kill someone else\'s clearance by re-granting it with an old date', async () => {
+    const program = await freshProgram();
+    const { holder } = holderFor(program, 'mei-lin-zhao');
+    await givePasses(program, holder, ['banList', 'walletControl']);
+    await grant(program, holder.ticket, 'basic');
+    const before = readClearance(program, holder.ticket, 'basic').validUntil;
+    // grant_clearance is open to anyone, so these are the attacks to refuse.
+    await refuses(grant(program, holder.ticket, 'basic', 1), /already be expired/);
+    await refuses(grant(program, holder.ticket, 'basic', program.chain.now - 3600), /at least this long is already recorded/);
+    await refuses(grant(program, holder.ticket, 'basic'), /at least this long is already recorded/);
+    assert.equal(readClearance(program, holder.ticket, 'basic').validUntil, before);
+  });
+
+  test('a profile that requires nothing cannot be defined', async () => {
+    const program = await freshProgram();
+    await refuses(program.chain.call(program.addresses.ClearanceRegistry, program.admin, 'define_profile', padTo32Bytes('free-pass'), minLevelsVector(program.slots, {}), 1000n), /at least one check/);
+  });
+
+  test('shelf lives are bounded, so a typo cannot break later arithmetic', async () => {
+    const program = await freshProgram();
+    const tooLong = 315360001n;
+    await refuses(program.chain.call(program.addresses.ClearanceRegistry, program.admin, 'define_profile', padTo32Bytes('forever'), minLevelsVector(program.slots, { banList: 1 }), tooLong), /between one second and ten years/);
+    await refuses(program.chain.call(program.checkAddress('identity'), program.admin, 'set_shelf_life', tooLong), /between one second and ten years/);
+    await refuses(program.chain.call(program.checkAddress('identity'), program.admin, 'set_shelf_life', 0n), /between one second and ten years/);
+    await refuses(program.chain.call(program.addresses.PairReceipt, program.admin, 'set_receipt_life', 86401n), /between one second and one day/);
+  });
+
   test('a clearance cannot be dated in the future', async () => {
     const program = await freshProgram();
     const { holder } = holderFor(program, 'mei-lin-zhao');
@@ -210,7 +253,7 @@ describe('modularity: checks can be swapped and added without touching other con
     await givePasses(program, holder, ['banList', 'walletControl']);
     await grant(program, holder.ticket, 'basic');
 
-    const replacement = await program.chain.deploy('BanListCheck');
+    const replacement = await program.chain.deploy('BanListCheck', program.roleKeyOf(program.admin));
     await program.chain.call(program.addresses.ClearanceRegistry, program.admin, 'register_check', BigInt(program.slots.banList), LocalChain.contractReference(replacement));
     await refuses(grant(program, holder.ticket, 'basic'), /no pass from this check/);
   });
@@ -220,8 +263,7 @@ describe('modularity: checks can be swapped and added without touching other con
     const registry = program.addresses.ClearanceRegistry;
     // Any contract that answers require_pass will do. Here: a second
     // EducationCheck standing in for "a check nobody has invented yet".
-    const sixthCheck = await program.chain.deploy('EducationCheck');
-    await program.chain.call(sixthCheck, program.admin, 'claim_admin');
+    const sixthCheck = await program.chain.deploy('EducationCheck', program.roleKeyOf(program.admin));
     await program.chain.call(registry, program.admin, 'register_check', 5n, LocalChain.contractReference(sixthCheck));
     const levels = minLevelsVector(program.slots, { banList: 1 });
     levels[5] = 1n;
@@ -303,12 +345,33 @@ describe('PolicyBinder: a policy binds only to a wallet cleared for what that po
     await refuses(bind(program, holder, 'cover-standard'), /expired/);
   });
 
-  test('the admin can release a wallet, after which it can be bound again', async () => {
+  test('the admin can release a wallet; the old binding stops proving and the wallet can be bound again', async () => {
     const { program, holder } = await clearedHolder('standard');
-    await bind(program, holder, 'cover-standard');
-    await refuses(program.chain.call(program.addresses.PolicyBinder, stranger, 'release_binding', holder.privateState.walletHash), /not an admin/);
-    await program.chain.call(program.addresses.PolicyBinder, program.admin, 'release_binding', holder.privateState.walletHash);
-    await bind(program, holder, 'cover-standard');
+    const binder = program.addresses.PolicyBinder;
+    const coverClass = padTo32Bytes('cover-standard');
+    const oldRef = random32Bytes();
+    const oldSalt = random32Bytes();
+    await bind(program, holder, 'cover-standard', oldRef, oldSalt);
+    const oldBinding = program.chain.pureCircuits(binder).commit_binding({ holderPk: holder.holderPublicKey, walletHash: holder.privateState.walletHash, policyRef: oldRef, coverClass }, oldSalt);
+    const oldState = { ...holder.privateState, bindingSalt: oldSalt };
+    assert.equal((await program.chain.call(binder, oldState, 'prove_binding', coverClass, oldRef)).result, true);
+
+    await refuses(program.chain.call(binder, stranger, 'release_binding', holder.privateState.walletHash, oldBinding), /not an admin/);
+    await program.chain.call(binder, program.admin, 'release_binding', holder.privateState.walletHash, oldBinding);
+
+    // A cancelled policy must not look like a live one at claim time.
+    await refuses(program.chain.call(binder, oldState, 'prove_binding', coverClass, oldRef), /has been released/);
+    // The wallet is free to be bound again, and the new binding proves.
+    const newRef = random32Bytes();
+    const newSalt = random32Bytes();
+    await bind(program, holder, 'cover-standard', newRef, newSalt);
+    assert.equal((await program.chain.call(binder, { ...holder.privateState, bindingSalt: newSalt }, 'prove_binding', coverClass, newRef)).result, true);
+  });
+
+  test('binding hands nothing back: the commitment is not returned by the contract', async () => {
+    const { program, holder } = await clearedHolder('standard');
+    const bound = await bind(program, holder, 'cover-standard');
+    assert.deepEqual(bound.result, []);
   });
 });
 
@@ -343,6 +406,15 @@ describe('PairReceipt: a receipt needs two different tickets, both clear right n
     const { holder: uncleared } = holderFor(program, 'anya-petrova');
     await refuses(issue(program, sender.ticket, uncleared.ticket), /not cleared/);
     await refuses(issue(program, uncleared.ticket, sender.ticket), /not cleared/);
+  });
+
+  test('a receipt cannot be back-dated beyond its own lifetime, or issued twice', async () => {
+    const { program, sender, receiver } = await twoClearedHolders();
+    const receipts = program.addresses.PairReceipt;
+    const at = (when) => program.chain.call(receipts, {}, 'issue_receipt', sender.ticket, receiver.ticket, padTo32Bytes('basic'), BigInt(when));
+    await refuses(at(program.chain.now - 901), /too far in the past/);
+    await at(program.chain.now);
+    await refuses(at(program.chain.now), /already been issued/);
   });
 
   test('refused if sender and receiver are the same ticket', async () => {

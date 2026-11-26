@@ -28,8 +28,7 @@
 //             appoint one.
 //
 // IDEAS, NOT BUILT
-//   - two-step admin handover (propose, then accept) so a typo cannot lock a
-//     contract
+//   - two-step admin handover (propose, then accept)
 //   - M-of-N admin approval for sensitive changes (see the multi-party
 //     authorization pattern in Midnight Expert's governance patterns)
 //   - an on-chain log of role changes for auditors
@@ -42,8 +41,8 @@ witness local_secret_key(): Bytes<32>;
 export ledger admins: Set<Bytes<32>>;
 export ledger operators: Set<Bytes<32>>;
 
-// True once the first admin has claimed the contract. See claim_admin.
-export ledger adminClaimed: Boolean;
+// How many admins there are. Kept so the last one can never be removed.
+export ledger adminCount: Uint<64>;
 
 // The public key that represents a ROLE holder (admin or operator).
 // The text prefix is a "domain separator": it guarantees this hash can never
@@ -77,19 +76,33 @@ circuit assert_is_operator(): [] {
   assert(operators.member(disclose(caller_role_key())), "Caller is not an approved operator");
 }
 
-// The deployer calls this once, straight after deployment, to become the
-// first admin. KNOWN LIMIT: whoever calls first wins, so deploy and claim in
-// the same breath. A production version would set the admin in the
-// constructor.
-export circuit claim_admin(): [] {
-  assert(!adminClaimed, "Admin already claimed");
-  admins.insert(disclose(caller_role_key()));
-  adminClaimed = true;
+// Called by every contract's constructor. The first admin is fixed at the
+// moment of deployment, as an argument, so there is no window in which a
+// stranger could claim a freshly deployed contract.
+// (An earlier version had a separate "claim" step that the first caller won.
+// The Nov 25 2026 security review flagged it; it is gone.)
+circuit install_first_admin(admin_key: Bytes<32>): [] {
+  admins.insert(disclose(admin_key));
+  adminCount = 1;
 }
 
 export circuit add_admin(admin_key: Bytes<32>): [] {
   assert_is_admin();
-  admins.insert(disclose(admin_key));
+  const k = disclose(admin_key);
+  assert(!admins.member(k), "That key is already an admin");
+  admins.insert(k);
+  adminCount = (adminCount + 1) as Uint<64>;
+}
+
+// Remove an admin, for example after a key is lost or leaked. The last admin
+// cannot be removed, or the contract could never be configured again.
+export circuit remove_admin(admin_key: Bytes<32>): [] {
+  assert_is_admin();
+  const k = disclose(admin_key);
+  assert(admins.member(k), "That key is not an admin");
+  assert(adminCount > 1, "The last admin cannot be removed");
+  admins.remove(k);
+  adminCount = (adminCount - 1) as Uint<64>;
 }
 
 export circuit add_operator(operator_key: Bytes<32>): [] {

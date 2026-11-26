@@ -36,6 +36,7 @@ import CompactStandardLibrary;
 include "../lib/Common";
 include "../lib/Ticket";
 include "../lib/Pass";
+include "../lib/Membership";
 
 // What the provider's hidden certificate commits to.
 struct EducationCertificate {
@@ -51,8 +52,9 @@ witness get_education_certificate(): EducationCertificate;
 witness get_education_certificate_salt(): Bytes<32>;
 witness get_education_certificate_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 
-constructor() {
-  adminClaimed = false;
+// `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
+constructor(first_admin: Bytes<32>) {
+  install_first_admin(first_admin);
   shelfLifeSeconds = 31536000;   // one year
 }
 
@@ -77,7 +79,7 @@ export circuit prove_education(ticket: Bytes<32>, issued_at: Uint<64>): [] {
   assert(certificate.holderPk == sealed_in_ticket.holderPk, "This education certificate belongs to someone else");
 
   const leaf = persistentCommit<EducationCertificate>(certificate, get_education_certificate_salt());
-  const root = merkleTreePathRoot<16, Bytes<32>>(get_education_certificate_path(leaf));
+  const root = root_for_leaf_16(leaf, get_education_certificate_path(leaf));
   assert(certificates.checkRoot(disclose(root)), "No such education certificate");
 
   record_pass(t, disclose(certificate.level), disclose(pass_expiry(disclose(issued_at), certificate.expiresAt)));

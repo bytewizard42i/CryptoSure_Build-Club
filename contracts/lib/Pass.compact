@@ -52,7 +52,8 @@ export ledger passCount: Counter;
 export circuit set_shelf_life(seconds: Uint<64>): [] {
   assert_is_admin();
   const s = disclose(seconds);
-  assert(s > 0, "Shelf life must be longer than zero");
+  // Upper bound (ten years) so a typo cannot make every later sum overflow.
+  assert(s > 0 && s <= 315360000, "Shelf life must be between one second and ten years");
   shelfLifeSeconds = s;
 }
 

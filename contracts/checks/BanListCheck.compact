@@ -44,6 +44,7 @@ import CompactStandardLibrary;
 include "../lib/Common";
 include "../lib/Ticket";
 include "../lib/Pass";
+include "../lib/Membership";
 
 // What the operator's hidden leaf commits to.
 struct ScreeningBody {
@@ -62,8 +63,9 @@ export ledger minAcceptedListVersion: Uint<64>;
 witness get_list_version(): Uint<64>;
 witness get_screening_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 
-constructor() {
-  adminClaimed = false;
+// `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
+constructor(first_admin: Bytes<32>) {
+  install_first_admin(first_admin);
   minAcceptedListVersion = 0;
   shelfLifeSeconds = 86400;   // one day: a ban list goes stale quickly
 }
@@ -103,7 +105,7 @@ export circuit prove_not_listed(ticket: Bytes<32>, issued_at: Uint<64>): [] {
     walletHash: sealed_in_ticket.walletHash,
     listVersion: version
   });
-  const root = merkleTreePathRoot<16, Bytes<32>>(get_screening_path(leaf));
+  const root = root_for_leaf_16(leaf, get_screening_path(leaf));
   assert(screenings.checkRoot(disclose(root)), "This wallet has not been cleared by screening");
 
   // A screening result has no expiry of its own, so only the shelf life applies.

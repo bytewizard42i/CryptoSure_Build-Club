@@ -238,6 +238,15 @@ export async function clearWallet(program, providers, holder, profileName, { wal
     steps.push({ check: checkName, passed: true, reused: false, detail: 'Passed, and a pass is recorded on the ticket' });
   }
 
+  // Already clear for this profile? Then there is nothing to record. (The
+  // registry refuses to re-record a clearance that is no longer than the one
+  // it has, so asking again would be turned away.)
+  const existing = readClearance(program, holder.ticket, profileName);
+  if (existing.clear) {
+    steps.push({ check: 'grant-clearance', passed: true, reused: true, detail: 'A current clearance is already recorded' });
+    return finish('clear', null, existing.validUntil);
+  }
+
   // 4. GRANT. Needs no private input: anyone could make this call.
   try {
     const granted = await program.chain.call(program.addresses.ClearanceRegistry, {}, 'grant_clearance', holder.ticket, padTo32Bytes(profileName), BigInt(program.chain.now));

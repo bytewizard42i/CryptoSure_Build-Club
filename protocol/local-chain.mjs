@@ -155,11 +155,13 @@ export class LocalChain {
   /**
    * Deploy one contract and return its address (a hex string).
    * Its verifier keys are attached, as a real deployment would attach them.
+   * `constructorArguments` are passed to the contract's constructor; every
+   * CryptoSure contract takes one: the first admin's role key.
    */
-  async deploy(contractName) {
+  async deploy(contractName, ...constructorArguments) {
     const compiled = await loadContractModule(contractName);
     const contract = new compiled.Contract(WITNESSES);
-    const initial = await contract.initialState(createConstructorContext({}, PLACEHOLDER_COIN_PUBLIC_KEY));
+    const initial = await contract.initialState(createConstructorContext({}, PLACEHOLDER_COIN_PUBLIC_KEY), ...constructorArguments);
     const contractState = initial.currentContractState;
 
     const keysFolder = path.join(BUILD_FOLDER, contractName, 'keys');
@@ -198,8 +200,24 @@ export class LocalChain {
    * @param {string} circuitName    the exported circuit to run
    */
   async call(address, actorPrivateState, circuitName, ...circuitArguments) {
+    return this.callWithWitnesses(address, actorPrivateState, {}, circuitName, ...circuitArguments);
+  }
+
+  /**
+   * The same as call(), but with some witnesses REPLACED for this one call.
+   *
+   * WHY THIS EXISTS
+   *   A witness runs on the caller's own device, so a dishonest caller can
+   *   make it return anything. A contract is only safe if its circuits check
+   *   what witnesses hand back. Tests use this method to play the dishonest
+   *   caller: "what if the device lies here?"
+   *
+   * @param {object} witnessOverrides  witness name -> replacement function
+   */
+  async callWithWitnesses(address, actorPrivateState, witnessOverrides, circuitName, ...circuitArguments) {
     const entry = this.#entry(address);
-    const circuit = entry.contract.impureCircuits[circuitName];
+    const contract = Object.keys(witnessOverrides).length === 0 ? entry.contract : new entry.compiled.Contract({ ...WITNESSES, ...witnessOverrides });
+    const circuit = contract.impureCircuits[circuitName];
     if (circuit === undefined) throw new TypeError(`${entry.name} has no circuit named "${circuitName}".`);
 
     const context = createCircuitContext({
@@ -258,5 +276,10 @@ export class LocalChain {
   /** The pure helper circuits a contract exports (hashes and commitments). */
   pureCircuits(address) {
     return this.#entry(address).compiled.pureCircuits;
+  }
+
+  /** The same helpers, for a contract that is not deployed yet. */
+  static async pureCircuitsOf(contractName) {
+    return (await loadContractModule(contractName)).pureCircuits;
   }
 }

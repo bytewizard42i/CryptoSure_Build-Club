@@ -126,8 +126,6 @@ future. Supplying an older time only shortens the caller's own pass.
 
 - **Not deployed.** The contracts run on a local stand-in. No proofs are
   generated and nothing is on a Midnight network yet.
-- **First caller becomes admin.** `claim_admin` is first-come. Deploy and
-  claim together; a production version sets the admin in the constructor.
 - **Wallet control is attested, not proven in-circuit.** An operator checks
   the wallet's signature off-chain. Other chains sign with schemes this MVP
   does not verify inside a proof.
@@ -141,10 +139,32 @@ future. Supplying an older time only shortens the caller's own pass.
   private mapping from address to ticket, kept by whoever runs the service.
 - **No fees.** Nothing is charged for a check, a clearance or a receipt.
 
+## Security review, Nov 25 2026
+
+An adversarial review of the first version of these contracts found one
+critical flaw and several serious ones. What was done about each:
+
+| Finding | Status |
+|---|---|
+| **Critical.** The Merkle path a holder's device supplied was never checked to be for the right leaf, so anyone holding one genuine leaf could forge every pass. Confirmed with a working bypass. | **Fixed.** `lib/Membership.compact` binds the leaf at all seven sites. `tests/dishonest-device.test.mjs` replays the attack against every tree. |
+| Anyone could overwrite a good clearance with an expired one by re-granting it with an old date. | **Fixed.** A clearance is never recorded already expired and never shortened. |
+| The admin was claimed in a separate step that the first caller won, and an admin could never be removed. | **Fixed.** The first admin is a constructor argument. `remove_admin` exists and refuses to remove the last one. |
+| A released binding still proved. | **Fixed.** Released bindings are recorded and `prove_binding` refuses them. |
+| `bind_policy` returned the binding commitment publicly. | **Fixed.** It returns nothing. |
+| A profile requiring nothing could be defined; shelf lives were unbounded; receipts could be back-dated or re-issued. | **Fixed.** |
+| The identity revocation value links every ticket backed by one credential, and the issuer can compute it. | **Open.** Documented in `IdentityCheck.compact`. Needs a different revocation design. |
+| Program operators who know a wallet hash can tell whether that wallet is bound. | **Open.** Documented in `PolicyBinder.compact`. |
+| Evidence leaves cannot be revoked (identity excepted), allowed regions cannot be removed, and a clearance cannot be revoked early. | **Open.** |
+| Sealed evidence structs carry no type tag, so two structs of the same shape share an encoding. No live exploit: each lives in its own tree. | **Open.** |
+| Three contracts inherit an unused operator role; one binding salt per device; a holder can overwrite their own pass with a weaker one. | **Open**, low severity. |
+
+The open items should be closed before any deployment that carries real
+personal data.
+
 ## Extending it
 
-- **A new check:** write a contract that includes `lib/Common`, `lib/Ticket`
-  and `lib/Pass`, give it a holder circuit that ends in `record_pass`,
+- **A new check:** write a contract that includes `lib/Common`, `lib/Ticket`,
+  `lib/Pass` and `lib/Membership`, give it a holder circuit that ends in `record_pass`,
   deploy it, and `register_check` it into a free slot.
 - **A new use of clearance:** write a contract that declares
   `contract Clearance { circuit require_clearance(...): Uint<64>; }` and

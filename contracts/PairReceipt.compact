@@ -61,8 +61,9 @@ export ledger receipts: Map<Bytes<32>, ReceiptRecord>;
 
 export ledger receiptCount: Counter;
 
-constructor() {
-  adminClaimed = false;
+// `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
+constructor(first_admin: Bytes<32>) {
+  install_first_admin(first_admin);
   receiptLifeSeconds = 900;   // fifteen minutes: long enough to send, short enough to stay true
 }
 
@@ -85,7 +86,7 @@ export circuit set_clearance_registry(registry: Clearance): [] {
 export circuit set_receipt_life(seconds: Uint<64>): [] {
   assert_is_admin();
   const s = disclose(seconds);
-  assert(s > 0, "A receipt's life must be longer than zero");
+  assert(s > 0 && s <= 86400, "A receipt's life must be between one second and one day");
   receiptLifeSeconds = s;
 }
 
@@ -96,6 +97,9 @@ export circuit issue_receipt(sender_ticket: Bytes<32>, receiver_ticket: Bytes<32
   const p = disclose(profile_id);
   const now = disclose(issued_at);
   assert(blockTimeGte(now), "issued_at is in the future");
+  // The date on a receipt is evidence, so it must be close to the truth:
+  // no earlier than one receipt-life before the real time.
+  assert(blockTimeLt((now + receiptLifeSeconds) as Uint<64>), "issued_at is too far in the past");
   assert(sender != receiver, "Sender and receiver must be different tickets");
   assert(clearanceRegistry.member(0), "No clearance registry has been set");
 
@@ -109,6 +113,7 @@ export circuit issue_receipt(sender_ticket: Bytes<32>, receiver_ticket: Bytes<32
   const valid_until = first < by_life ? first : by_life;
 
   const id = derive_receipt_id(sender, receiver, p, now);
+  assert(!receipts.member(id), "This exact receipt has already been issued");
   receipts.insert(id, ReceiptRecord { issuedAt: now, validUntil: valid_until });
   receiptCount.increment(1);
   return id;

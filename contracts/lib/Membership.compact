@@ -1,0 +1,39 @@
+// ============================================================================
+// lib/Membership.compact — "is THIS leaf in the tree?", done safely
+// ============================================================================
+//
+// THE TRAP THIS FILE EXISTS TO CLOSE
+//   A Merkle path is supplied by the caller's own device (a witness), so a
+//   dishonest caller can supply ANY path. A path carries its own `leaf`
+//   field, and the root is computed from THAT leaf, not from the leaf the
+//   circuit had in mind. So
+//
+//       root = merkleTreePathRoot(path);  assert(tree.checkRoot(root));
+//
+//   on its own only proves "SOME leaf is in the tree". A cheat could hand
+//   back a path for somebody else's leaf and pass.
+//
+// THE FIX
+//   Compare the path's leaf with the leaf we computed, every time. These
+//   helpers do it so that no contract can forget.
+//
+// HISTORY
+//   The first version of these contracts made exactly this mistake at six
+//   call sites. A security review on Nov 25 2026 caught it, and a test that
+//   plays the dishonest device (tests/dishonest-device.test.mjs) now fails
+//   if it ever comes back.
+//   Reference: the same warning in Midnight's RWA reference contract, and
+//   "Path leaf matches expected value" in Midnight Expert's review checklist.
+// ============================================================================
+
+// Root of a depth-16 tree, but ONLY if the path really is for `leaf`.
+circuit root_for_leaf_16(leaf: Bytes<32>, path: MerkleTreePath<16, Bytes<32>>): MerkleTreeDigest {
+  assert(path.leaf == leaf, "The supplied Merkle path is for a different leaf");
+  return merkleTreePathRoot<16, Bytes<32>>(path);
+}
+
+// The same for a depth-8 tree.
+circuit root_for_leaf_8(leaf: Bytes<32>, path: MerkleTreePath<8, Bytes<32>>): MerkleTreeDigest {
+  assert(path.leaf == leaf, "The supplied Merkle path is for a different leaf");
+  return merkleTreePathRoot<8, Bytes<32>>(path);
+}

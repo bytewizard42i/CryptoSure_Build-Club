@@ -90,8 +90,9 @@ export ledger clearances: Map<Bytes<32>, Uint<64>>;
 
 export ledger clearanceCount: Counter;
 
-constructor() {
-  adminClaimed = false;
+// `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
+constructor(first_admin: Bytes<32>) {
+  install_first_admin(first_admin);
 }
 
 // The key a clearance is stored under: one per (ticket, profile) pair.
@@ -115,8 +116,15 @@ export circuit register_check(slot: Uint<8>, check: Check): [] {
 export circuit define_profile(profile_id: Bytes<32>, min_levels: Vector<8, Uint<8>>, shelf_life_seconds: Uint<64>): [] {
   assert_is_admin();
   const life = disclose(shelf_life_seconds);
-  assert(life > 0, "A profile's shelf life must be longer than zero");
-  profiles.insert(disclose(profile_id), Profile { minLevels: disclose(min_levels), shelfLifeSeconds: life });
+  assert(life > 0 && life <= 315360000, "A profile's shelf life must be between one second and ten years");
+  const levels = disclose(min_levels);
+  // A profile that requires nothing would clear every ticket ever made.
+  assert(
+    levels[0] > 0 || levels[1] > 0 || levels[2] > 0 || levels[3] > 0 ||
+    levels[4] > 0 || levels[5] > 0 || levels[6] > 0 || levels[7] > 0,
+    "A profile must require at least one check"
+  );
+  profiles.insert(disclose(profile_id), Profile { minLevels: levels, shelfLifeSeconds: life });
 }
 
 // Asks ONE slot for its verdict. Returns the earlier of the expiry so far
@@ -156,7 +164,14 @@ export circuit grant_clearance(ticket: Bytes<32>, profile_id: Bytes<32>, issued_
   const e6 = earliest_after_slot(t, 6, need[6], e5);
   const valid_until = earliest_after_slot(t, 7, need[7], e6);
 
-  clearances.insert(derive_clearance_id(t, p), valid_until);
+  // Because ANYONE may call this, it must never be usable to hurt a ticket.
+  // Without these two checks a stranger could pass an old `issued_at` and
+  // overwrite someone's good clearance with one that is already over.
+  assert(blockTimeLt(valid_until), "This clearance would already be expired");
+  const id = derive_clearance_id(t, p);
+  assert(!clearances.member(id) || clearances.lookup(id) < valid_until, "A clearance at least this long is already recorded");
+
+  clearances.insert(id, valid_until);
   clearanceCount.increment(1);
   return valid_until;
 }

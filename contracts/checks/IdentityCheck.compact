@@ -20,9 +20,18 @@
 //   knowing anything about cover.
 //
 // WHAT THE CHAIN SEES
-//   The level reached, an expiry, and a revocation nullifier. Not the person.
-//   Two tickets backed by the same credential share that nullifier, so they
-//   are linkable to each other (not to a person).
+//   The level reached, an expiry, and a revocation nullifier.
+//
+// A PRIVACY LIMIT, STATED PLAINLY
+//   The revocation nullifier is a hash of the credential id alone, and it is
+//   published every time the credential is used. So:
+//     - every ticket backed by the same credential is linkable to the others,
+//       including a "fresh" ticket made later
+//     - the ISSUER, who knows the credential id, can compute the nullifier
+//       and recognise which tickets belong to a person it verified
+//   Outsiders learn neither the person nor the credential. Removing the
+//   issuer's ability needs a different revocation design (for example a
+//   non-membership proof) and is not done here.
 //
 // IDEAS, NOT BUILT
 //   - verifying the issuer's signature inside the proof, so no on-chain
@@ -39,6 +48,7 @@ import CompactStandardLibrary;
 include "../lib/Common";
 include "../lib/Ticket";
 include "../lib/Pass";
+include "../lib/Membership";
 
 // What the issuer's hidden credential commits to.
 struct IdentityCredential {
@@ -55,8 +65,9 @@ witness get_identity_credential(): IdentityCredential;
 witness get_identity_credential_salt(): Bytes<32>;
 witness get_identity_credential_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 
-constructor() {
-  adminClaimed = false;
+// `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
+constructor(first_admin: Bytes<32>) {
+  install_first_admin(first_admin);
   shelfLifeSeconds = 7776000;   // 90 days: identity changes slowly
 }
 
@@ -98,7 +109,7 @@ export circuit prove_identity(ticket: Bytes<32>, issued_at: Uint<64>): [] {
   assert(credential.holderPk == sealed_in_ticket.holderPk, "This identity credential belongs to someone else");
 
   const leaf = persistentCommit<IdentityCredential>(credential, get_identity_credential_salt());
-  const root = merkleTreePathRoot<16, Bytes<32>>(get_identity_credential_path(leaf));
+  const root = root_for_leaf_16(leaf, get_identity_credential_path(leaf));
   assert(credentials.checkRoot(disclose(root)), "No such identity credential");
 
   const nullifier = disclose(derive_revocation_nullifier(credential.credentialId));

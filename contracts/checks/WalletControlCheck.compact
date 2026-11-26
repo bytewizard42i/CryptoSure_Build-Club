@@ -39,6 +39,7 @@ import CompactStandardLibrary;
 include "../lib/Common";
 include "../lib/Ticket";
 include "../lib/Pass";
+include "../lib/Membership";
 
 // What the verifier's hidden attestation commits to.
 struct ControlAttestation {
@@ -53,8 +54,9 @@ witness get_control_attestation(): ControlAttestation;
 witness get_control_attestation_salt(): Bytes<32>;
 witness get_control_attestation_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 
-constructor() {
-  adminClaimed = false;
+// `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
+constructor(first_admin: Bytes<32>) {
+  install_first_admin(first_admin);
   shelfLifeSeconds = 2592000;   // 30 days
 }
 
@@ -80,7 +82,7 @@ export circuit prove_wallet_control(ticket: Bytes<32>, issued_at: Uint<64>): [] 
   assert(attestation.walletHash == sealed_in_ticket.walletHash, "This attestation is about a different wallet");
 
   const leaf = persistentCommit<ControlAttestation>(attestation, get_control_attestation_salt());
-  const root = merkleTreePathRoot<16, Bytes<32>>(get_control_attestation_path(leaf));
+  const root = root_for_leaf_16(leaf, get_control_attestation_path(leaf));
   assert(attestations.checkRoot(disclose(root)), "No such wallet-control attestation");
 
   record_pass(t, 1, disclose(pass_expiry(disclose(issued_at), attestation.expiresAt)));

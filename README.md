@@ -87,11 +87,12 @@ Needs Node.js 22 or later and the Compact toolchain 0.36.1.
 npm install
 npm run compile   # about a minute: compiles the eight contracts with keys
 npm run demo      # clears a cast of wallets, checks pairs, binds policies
-npm test          # 77 tests
+npm test          # 93 tests
 ```
 
-Half of the tests call the contracts directly, skipping our own software, to
-show each contract refuses bad input on its own.
+Most of the tests call the contracts directly, skipping our own software, to
+show each contract refuses bad input on its own. One file plays a dishonest
+device that lies to the contracts about its private inputs.
 
 ### What is real and what is simulated
 
@@ -113,7 +114,7 @@ contracts/
   ClearanceRegistry       turns passes into one clearance
   PairReceipt             a dated receipt for two clear wallets
   PolicyBinder            binds a policy to a cleared wallet
-  lib/                    code shared by the contracts (roles, tickets, passes)
+  lib/                    code shared by the contracts (roles, tickets, passes, Merkle membership)
   legacy/                 the first single-contract version, kept for reference
 protocol/
   local-chain.mjs         runs the compiled contracts locally

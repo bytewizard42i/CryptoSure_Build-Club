@@ -100,6 +100,17 @@ describe('shelf life: passes are reused while good, and re-done when stale', () 
     assert.equal(again.steps.filter((step) => step.reused).length, 5);
   });
 
+  test('clearing again for the same profile while still clear is a no-op, not a failure', async () => {
+    const program = await freshProgram();
+    const providers = mockProviders();
+    const { holder, walletSigner } = holderFor(program, 'mei-lin-zhao');
+    const first = await clearWallet(program, providers, holder, 'enhanced', { walletSigner });
+    program.chain.advanceTime(3600);
+    const again = await clearWallet(program, providers, holder, 'enhanced', { walletSigner });
+    assert.deepEqual([again.status, again.validUntil], ['clear', first.validUntil]);
+    assert.equal(Number(program.chain.publicLedger(program.addresses.ClearanceRegistry).clearanceCount), 1);
+  });
+
   test('a day later only the ban list is asked again; the slower checks are still good', async () => {
     const program = await freshProgram();
     const providers = mockProviders();

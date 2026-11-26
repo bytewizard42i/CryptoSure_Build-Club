@@ -16,8 +16,8 @@
 //
 // This file does the wiring an administrator would do once, by hand or by
 // script, on a real network:
-//   1. deploy each contract
-//   2. claim the admin role on each
+//   1. deploy each contract, naming its first admin as it is deployed
+//   2. (nothing: there is no separate "claim" step for a stranger to win)
 //   3. appoint the operator each check trusts
 //   4. plug each check into its slot in the ClearanceRegistry
 //   5. define the profiles and cover classes from config/program.json
@@ -76,13 +76,14 @@ export async function deployProgram(programConfig, options = {}) {
   const admin = { secretKey: deriveDemoSecretKey('program-admin') };
   const operators = Object.fromEntries(CHECK_NAMES.map((checkName) => [checkName, { secretKey: deriveDemoSecretKey(`operator:${checkName}`) }]));
 
-  // 1 + 2: deploy everything and claim admin.
+  // 1: deploy everything. Each contract is told who its first admin is in
+  // the same step, so it is never without an owner.
+  const { derive_role_key } = await LocalChain.pureCircuitsOf('ClearanceRegistry');
+  const roleKeyOf = (actor) => derive_role_key(actor.secretKey);
   const addresses = {};
   for (const contractName of [...Object.values(CHECK_CONTRACTS), 'ClearanceRegistry', 'PairReceipt', 'PolicyBinder']) {
-    addresses[contractName] = await chain.deploy(contractName);
-    await chain.call(addresses[contractName], admin, 'claim_admin');
+    addresses[contractName] = await chain.deploy(contractName, roleKeyOf(admin));
   }
-  const roleKeyOf = (actor) => chain.pureCircuits(addresses.ClearanceRegistry).derive_role_key(actor.secretKey);
 
   // 3 + 4: appoint each check's operator and plug the check into its slot.
   const slots = Object.fromEntries(namedEntries(programConfig.slots));
@@ -116,6 +117,7 @@ export async function deployProgram(programConfig, options = {}) {
     admin,
     operators,
     slots,
+    roleKeyOf,
     config: programConfig,
     // DEMO ONLY: the secret behind every wallet hash (see encoding.mjs).
     walletHashKey: deriveDemoSecretKey('program-wallet-hash-key')

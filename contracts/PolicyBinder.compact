@@ -31,8 +31,15 @@
 // WHAT THE CHAIN SEES
 //   - the ticket and the cover class
 //   - a binding nullifier (stops the same wallet being bound twice)
-//   - a hidden binding commitment
+//   - a binding commitment. It hides its contents, but it appears in the
+//     same transaction as the ticket, so the two are linked.
 //   Not the person, the address, or the policy.
+//
+// WHO CAN TELL A WALLET IS BOUND
+//   The nullifier is a hash of walletHash alone. Anyone who knows a
+//   walletHash (the program's operators do) can compute it and see whether
+//   that wallet holds a policy. Outsiders cannot. Hiding it from operators
+//   too needs a different nullifier design and is not done here.
 //
 // A PRIVACY NOTE ABOUT walletHash
 //   The nullifier is a hash of walletHash. If walletHash were a plain hash
@@ -57,6 +64,7 @@ import CompactStandardLibrary;
 
 include "lib/Common";
 include "lib/Ticket";
+include "lib/Membership";
 
 contract Clearance {
   circuit require_clearance(ticket: Bytes<32>, profile_id: Bytes<32>): Uint<64>;
@@ -80,14 +88,18 @@ export ledger coverClasses: Map<Bytes<32>, Bytes<32>>;
 export ledger bindings: HistoricMerkleTree<16, Bytes<32>>;
 export ledger bindingNullifiers: Set<Bytes<32>>;
 
+// Bindings that have been released. A released binding no longer proves.
+export ledger releasedBindings: Set<Bytes<32>>;
+
 export ledger bindingCount: Counter;
 
 // Private inputs from the holder's device.
 witness get_binding_salt(): Bytes<32>;
 witness get_binding_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 
-constructor() {
-  adminClaimed = false;
+// `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
+constructor(first_admin: Bytes<32>) {
+  install_first_admin(first_admin);
 }
 
 // One wallet, one active binding.
@@ -110,8 +122,15 @@ export circuit define_cover_class(cover_class: Bytes<32>, required_profile: Byte
   coverClasses.insert(disclose(cover_class), disclose(required_profile));
 }
 
-// HOLDER: bind my cleared wallet to a policy. Returns the binding commitment.
-export circuit bind_policy(ticket: Bytes<32>, cover_class: Bytes<32>, policy_ref: Bytes<32>): Bytes<32> {
+// Public helper: the binding commitment, computed exactly as the circuits
+// compute it. The holder's device uses it to know its own commitment, which
+// bind_policy deliberately does NOT hand back (a returned value is public).
+export circuit commit_binding(body: BindingBody, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<BindingBody>(body, salt);
+}
+
+// HOLDER: bind my cleared wallet to a policy.
+export circuit bind_policy(ticket: Bytes<32>, cover_class: Bytes<32>, policy_ref: Bytes<32>): [] {
   const t = disclose(ticket);
   const c = disclose(cover_class);
   const sealed_in_ticket = open_own_ticket(t);
@@ -135,7 +154,6 @@ export circuit bind_policy(ticket: Bytes<32>, cover_class: Bytes<32>, policy_ref
   );
   bindings.insert(disclose(binding));
   bindingCount.increment(1);
-  return disclose(binding);
 }
 
 // HOLDER, at claim time: prove "the wallet I am claiming on is the one bound
@@ -150,16 +168,22 @@ export circuit prove_binding(cover_class: Bytes<32>, policy_ref: Bytes<32>): Boo
     },
     get_binding_salt()
   );
-  const root = merkleTreePathRoot<16, Bytes<32>>(get_binding_path(binding));
+  const root = root_for_leaf_16(binding, get_binding_path(binding));
   assert(bindings.checkRoot(disclose(root)), "There is no such binding");
+  // A released binding must stop proving. Checking this names the binding
+  // publicly, so a claim is linkable to the transaction that created it.
+  assert(!releasedBindings.member(disclose(binding)), "This binding has been released");
   return true;
 }
 
 // ADMIN: free a wallet to be bound again, when a policy ends or the wallet
 // must be re-cleared.
-export circuit release_binding(wallet_hash: Bytes<32>): [] {
+// The admin names both the wallet (to free it) and the binding commitment
+// (to stop it proving). Both come from the insurer's private policy record.
+export circuit release_binding(wallet_hash: Bytes<32>, binding: Bytes<32>): [] {
   assert_is_admin();
   const nullifier = disclose(derive_binding_nullifier(wallet_hash));
   assert(bindingNullifiers.member(nullifier), "This wallet is not bound");
   bindingNullifiers.remove(nullifier);
+  releasedBindings.insert(disclose(binding));
 }
