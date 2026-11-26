@@ -36,17 +36,41 @@
 //   Not the person, the address, or the policy.
 //
 // WHO CAN TELL A WALLET IS BOUND
-//   The nullifier is a hash of walletHash alone. Anyone who knows a
-//   walletHash (the program's operators do) can compute it and see whether
-//   that wallet holds a policy. Outsiders cannot. Hiding it from operators
-//   too needs a different nullifier design and is not done here.
+//   Until the Nov 25 2026 review the nullifier was a hash of walletHash
+//   ALONE. Anyone who could compute a walletHash could therefore compute the
+//   nullifier and look it up here to learn whether that wallet holds a
+//   policy — and the program's own operators compute walletHashes all day,
+//   because they hold the key it is HMAC'd under. Screening a wallet already
+//   tells an operator the address; it should not also tell them who is
+//   insured.
+//
+//   The nullifier now mixes in a value only the holder can produce:
+//
+//       nullifier = H( "…nullifier:", walletHash, H("…holder:", holder sk) )
+//
+//   Knowing the wallet is no longer enough. Without the holder's secret key
+//   the nullifier cannot be computed, so no operator, insurer or observer
+//   can test a wallet for a policy. The holder's device computes it inside
+//   the proof; the secret itself never leaves the device.
+//
+//   WHAT THIS CHANGES ABOUT "ONE WALLET, ONE BINDING". The rule is now "one
+//   wallet, one binding PER HOLDER KEY" rather than per wallet outright. The
+//   same person cannot bind the same wallet twice, however many fresh
+//   tickets they make, because their secret key is the same. Two DIFFERENT
+//   holder keys that both control one wallet could each bind it once. That
+//   is a real change, and it is the right trade: the old rule bought its
+//   extra strictness by making every insured wallet testable by anyone who
+//   knew it, and a jointly controlled wallet with two policies on it is a
+//   problem an underwriter can see in its own records, whereas a privacy
+//   leak on the public chain is not. Recorded in docs/design/protocol.md.
 //
 // A PRIVACY NOTE ABOUT walletHash
-//   The nullifier is a hash of walletHash. If walletHash were a plain hash
-//   of the address, anyone could hash a known address and look for it here.
-//   So walletHash MUST be a KEYED hash: computed with a secret that only the
-//   program's operators hold. This contract cannot enforce that; the
-//   off-chain code does. See docs/design/protocol.md.
+//   walletHash must still be a KEYED hash (an HMAC under a secret the
+//   program holds), not a plain hash of the address. The nullifier no longer
+//   depends on that for its secrecy, but the ban-list check's leaves do, and
+//   a plain hash would let anyone test a known address against them. This
+//   contract cannot enforce it; the off-chain code does. See
+//   docs/design/protocol.md.
 //
 // IDEAS, NOT BUILT
 //   - hiding the cover class, so an observer cannot tell a small policy from
@@ -63,7 +87,9 @@ pragma language_version >= 0.28;
 import CompactStandardLibrary;
 
 include "lib/Common";
+
 include "lib/Ticket";
+
 include "lib/Membership";
 
 contract Clearance {
@@ -86,6 +112,7 @@ export ledger coverClasses: Map<Bytes<32>, Bytes<32>>;
 
 // Bindings as hidden commitments, plus one nullifier per bound wallet.
 export ledger bindings: HistoricMerkleTree<16, Bytes<32>>;
+
 export ledger bindingNullifiers: Set<Bytes<32>>;
 
 // Bindings that have been released. A released binding no longer proves.
@@ -95,6 +122,7 @@ export ledger bindingCount: Counter;
 
 // Private inputs from the holder's device.
 witness get_binding_salt(): Bytes<32>;
+
 witness get_binding_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 
 // `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
@@ -102,11 +130,25 @@ constructor(first_admin: Bytes<32>) {
   install_first_admin(first_admin);
 }
 
-// One wallet, one active binding.
-export circuit derive_binding_nullifier(wallet_hash: Bytes<32>): Bytes<32> {
+// The holder's binding key: a value derived from the holder's secret key
+// under a prefix of its own, so it is unrelated to their holder public key
+// and to any other value derived from the same secret. This is the part of
+// the nullifier an operator cannot produce.
+export circuit derive_binding_key(sk: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:binder:holder:"),
+    sk
+  ]);
+}
+
+// One wallet, one active binding per holder key. Takes the binding key
+// rather than the secret itself, so nothing that calls this ever handles a
+// secret it did not already have.
+export circuit derive_binding_nullifier(wallet_hash: Bytes<32>, binding_key: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([
     pad(32, "cryptosure:binder:nullifier:"),
-    wallet_hash
+    wallet_hash,
+    binding_key
   ]);
 }
 
@@ -125,8 +167,19 @@ export circuit define_cover_class(cover_class: Bytes<32>, required_profile: Byte
 // Public helper: the binding commitment, computed exactly as the circuits
 // compute it. The holder's device uses it to know its own commitment, which
 // bind_policy deliberately does NOT hand back (a returned value is public).
+//
+// THE TYPE TAG
+//   A `BindingBody` is four Bytes<32>. Nothing else in this program has that
+//   shape today, but the same reasoning as for the evidence structs applies:
+//   a binding is what a claim is paid against, so it should be provably not
+//   any other sealed value. See `commit_identity_credential` in
+//   checks/IdentityCheck.compact.
+//   (Nov 25 2026 review, "sealed evidence structs carry no type tag".)
 export circuit commit_binding(body: BindingBody, salt: Bytes<32>): Bytes<32> {
-  return persistentCommit<BindingBody>(body, salt);
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:binder:binding:"),
+    persistentCommit<BindingBody>(body, salt)
+  ]);
 }
 
 // HOLDER: bind my cleared wallet to a policy.
@@ -139,11 +192,14 @@ export circuit bind_policy(ticket: Bytes<32>, cover_class: Bytes<32>, policy_ref
   assert(clearanceRegistry.member(0), "No clearance registry has been set");
   clearanceRegistry.lookup(0).require_clearance(t, coverClasses.lookup(c));
 
-  const nullifier = disclose(derive_binding_nullifier(sealed_in_ticket.walletHash));
+  const nullifier = disclose(derive_binding_nullifier(
+    sealed_in_ticket.walletHash,
+    derive_binding_key(local_secret_key())
+  ));
   assert(!bindingNullifiers.member(nullifier), "This wallet is already bound to a policy");
   bindingNullifiers.insert(nullifier);
 
-  const binding = persistentCommit<BindingBody>(
+  const binding = commit_binding(
     BindingBody {
       holderPk: sealed_in_ticket.holderPk,
       walletHash: sealed_in_ticket.walletHash,
@@ -159,7 +215,7 @@ export circuit bind_policy(ticket: Bytes<32>, cover_class: Bytes<32>, policy_ref
 // HOLDER, at claim time: prove "the wallet I am claiming on is the one bound
 // to this policy" without naming the wallet.
 export circuit prove_binding(cover_class: Bytes<32>, policy_ref: Bytes<32>): Boolean {
-  const binding = persistentCommit<BindingBody>(
+  const binding = commit_binding(
     BindingBody {
       holderPk: derive_holder_key(local_secret_key()),
       walletHash: get_wallet_hash(),
@@ -178,12 +234,24 @@ export circuit prove_binding(cover_class: Bytes<32>, policy_ref: Bytes<32>): Boo
 
 // ADMIN: free a wallet to be bound again, when a policy ends or the wallet
 // must be re-cleared.
-// The admin names both the wallet (to free it) and the binding commitment
-// (to stop it proving). Both come from the insurer's private policy record.
-export circuit release_binding(wallet_hash: Bytes<32>, binding: Bytes<32>): [] {
+//
+// The admin names the NULLIFIER (to free the wallet) and the binding
+// commitment (to stop it proving). Both are opaque 32-byte values from the
+// insurer's private policy record.
+//
+// WHY THE NULLIFIER AND NOT THE WALLET HASH. It used to take the wallet hash
+// and derive the nullifier here, which is exactly why an operator could
+// derive it too. Now that the nullifier depends on the holder's secret, the
+// admin cannot compute it and must be told it. That is not a new burden: the
+// nullifier is in the `bind_policy` transaction the insurer took part in, so
+// the insurer records it alongside the policy document, the binding
+// commitment and the ticket. An insurer that loses that record can no longer
+// release the wallet — a deliberate consequence of the admin no longer being
+// able to work it out from the address.
+export circuit release_binding(binding_nullifier: Bytes<32>, binding: Bytes<32>): [] {
   assert_is_admin();
-  const nullifier = disclose(derive_binding_nullifier(wallet_hash));
-  assert(bindingNullifiers.member(nullifier), "This wallet is not bound");
+  const nullifier = disclose(binding_nullifier);
+  assert(bindingNullifiers.member(nullifier), "No binding is recorded under that nullifier");
   bindingNullifiers.remove(nullifier);
   releasedBindings.insert(disclose(binding));
 }

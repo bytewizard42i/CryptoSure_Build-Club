@@ -37,15 +37,30 @@ struct TicketBody {
 
 // Private inputs from the holder's device. NEVER disclosed.
 witness get_wallet_hash(): Bytes<32>;
+
 witness get_ticket_salt(): Bytes<32>;
+
+// Seals a ticket body. Everything that computes a ticket, in this file and
+// off-chain, goes through here.
+//
+// THE TYPE TAG
+//   A `TicketBody` is two Bytes<32>, a shape any number of other structs
+//   could share. A ticket is the handle every pass and clearance hangs on,
+//   so it is the last value that should be confusable with anything else.
+//   Hashing the commitment under a tag of its own makes a ticket provably
+//   not any other sealed value.
+//   (Nov 25 2026 review, "sealed evidence structs carry no type tag".)
+export circuit commit_ticket(body: TicketBody, salt: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:ticket:body:"),
+    persistentCommit<TicketBody>(body, salt)
+  ]);
+}
 
 // Public helper so off-chain code can compute a ticket exactly the way the
 // contracts check it.
 export circuit derive_ticket(holder_pk: Bytes<32>, wallet_hash: Bytes<32>, salt: Bytes<32>): Bytes<32> {
-  return persistentCommit<TicketBody>(
-    TicketBody { holderPk: holder_pk, walletHash: wallet_hash },
-    salt
-  );
+  return commit_ticket(TicketBody { holderPk: holder_pk, walletHash: wallet_hash }, salt);
 }
 
 // Opens the caller's ticket inside the proof and returns what was sealed in
@@ -58,7 +73,7 @@ circuit open_own_ticket(ticket: Bytes<32>): TicketBody {
     walletHash: get_wallet_hash()
   };
   assert(
-    disclose(persistentCommit<TicketBody>(body, get_ticket_salt()) == ticket),
+    disclose(commit_ticket(body, get_ticket_salt()) == ticket),
     "This ticket does not belong to the caller"
   );
   return body;

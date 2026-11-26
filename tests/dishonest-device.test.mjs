@@ -18,14 +18,23 @@
 
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { ContractRejectedError } from '../protocol/local-chain.mjs';
-import { recordAndProveCheck } from '../protocol/clearance.mjs';
+import { ContractRejectedError, findPathOrDecoy } from '../protocol/local-chain.mjs';
+import { proveCheck, recordAndProveCheck, recordCheckEvidence, revokeEvidence, revokePass } from '../protocol/clearance.mjs';
 import { padTo32Bytes, random32Bytes, bytesToHex } from '../protocol/encoding.mjs';
 import { ALL_CHECKS, freshProgram, givePasses, goodAnswer, holderFor } from './helpers.mjs';
 
 const refuses = (promise, messagePattern) => assert.rejects(promise, (error) => error instanceof ContractRejectedError && messagePattern.test(error.message));
 const WRONG_LEAF = /Merkle path is for a different leaf/;
 const now = (program) => BigInt(program.chain.now);
+
+// Which ledger field holds each check's evidence tree.
+const TREE_OF = {
+  banList: 'screenings',
+  region: 'attestations',
+  identity: 'credentials',
+  education: 'certificates',
+  walletControl: 'attestations'
+};
 
 // An honest person (Theo) gets real evidence into every tree. The cheat
 // (Colin) has none, and will try to borrow Theo's place in each tree.
@@ -100,6 +109,104 @@ describe('a borrowed Merkle path proves nothing', () => {
     const lyingDevice = { get_binding_path: ({ privateState, ledger }) => [privateState, ledger.bindings.findPathForLeaf(realBinding)] };
     await refuses(program.chain.callWithWitnesses(binder, state, lyingDevice, 'prove_binding', coverClass, random32Bytes()), WRONG_LEAF);
     await refuses(program.chain.callWithWitnesses(binder, state, lyingDevice, 'prove_binding', padTo32Bytes('cover-standard'), realRef), WRONG_LEAF);
+  });
+});
+
+// ============================================================================
+// Revocation by blanking a leaf: the attack it must survive is REPLAY.
+//
+// A HistoricMerkleTree accepts a proof against any root it has ever had. So
+// blanking a revoked leaf is not enough on its own: a holder whose device
+// kept a Merkle path from before the revocation could prove against that
+// older root and the revocation would do nothing at all. The contracts call
+// resetHistory() immediately after blanking to drop those roots.
+//
+// These tests play exactly that dishonest device: it hands back the path it
+// saved earlier instead of looking in the tree as it is now. Confirmed
+// before the change was written that WITHOUT resetHistory() every one of
+// them passes the wrong way round.
+// ============================================================================
+describe('revoked evidence cannot be proven by replaying an older root', () => {
+  // check name -> [the circuit the holder proves with, the message the
+  // contract gives when the leaf is not in the tree, the path witness]
+  const REVOCABLE = [
+    ['identity', 'prove_identity', /No such identity credential/, 'get_identity_credential_path'],
+    ['education', 'prove_education', /No such education certificate/, 'get_education_certificate_path'],
+    ['region', 'prove_in_region', /No such region attestation/, 'get_region_attestation_path'],
+    ['walletControl', 'prove_wallet_control', /No such wallet-control attestation/, 'get_control_attestation_path'],
+    ['banList', 'prove_not_listed', /not been cleared by screening/, 'get_screening_path']
+  ];
+
+  for (const [checkName, circuit, notInTree, pathWitness] of REVOCABLE) {
+    test(`${checkName}: a path saved before the revocation no longer proves`, async () => {
+      const program = await freshProgram();
+      const { holder } = holderFor(program, 'theo-brandt');
+      const address = program.checkAddress(checkName);
+
+      // The evidence is recorded and the holder's device saves its path,
+      // exactly as it would while preparing a proof.
+      const evidence = await recordCheckEvidence(program, holder, checkName, goodAnswer(program, checkName));
+      let savedPath = null;
+      await program.chain.callWithWitnesses(
+        address,
+        { ...holder.privateState, ...evidence },
+        { [pathWitness]: ({ privateState, ledger }, leaf) => {
+          savedPath = findPathOrDecoy(ledger[TREE_OF[checkName]], leaf, 16);
+          return [privateState, savedPath];
+        } },
+        circuit, holder.ticket, now(program)
+      );
+      assert.notEqual(savedPath, null);
+      // The pass was collected, so it must also be revoked to put the holder
+      // out; this test is about whether they can collect it AGAIN.
+      await revokePass(program, checkName, holder.ticket);
+      await revokeEvidence(program, checkName, evidence.leafIndex);
+
+      // Honest device: the leaf is gone, so there is no path and the decoy
+      // hashes to a root the tree never had.
+      await refuses(proveCheck(program, holder, checkName, evidence), notInTree);
+
+      // Dishonest device: replay the path saved before the revocation. This
+      // is the one that resetHistory() exists to defeat.
+      await refuses(
+        program.chain.callWithWitnesses(address, { ...holder.privateState, ...evidence }, { [pathWitness]: ({ privateState }) => [privateState, savedPath] }, circuit, holder.ticket, now(program)),
+        notInTree
+      );
+      assert.equal(program.chain.publicLedger(address).passes.member(holder.ticket), false);
+    });
+  }
+
+  test('region: a path saved before a region was withdrawn no longer proves', async () => {
+    const program = await freshProgram();
+    const { holder } = holderFor(program, 'theo-brandt');
+    const region = program.checkAddress('region');
+    const evidence = await recordCheckEvidence(program, holder, 'region', goodAnswer(program, 'region', { regionCode: 'REGION-A' }));
+
+    let savedAllowedPath = null;
+    await program.chain.callWithWitnesses(
+      region,
+      { ...holder.privateState, ...evidence },
+      { get_allowed_region_path: ({ privateState, ledger }, leaf) => {
+        savedAllowedPath = findPathOrDecoy(ledger.allowedRegions, leaf, 8);
+        return [privateState, savedAllowedPath];
+      } },
+      'prove_in_region', holder.ticket, now(program)
+    );
+    await revokePass(program, 'region', holder.ticket);
+
+    // The program loses its licence for REGION-A. It was the first region
+    // allowed by config/program.json, so it sits at index 0.
+    await program.chain.call(region, program.admin, 'remove_allowed_region', 0n);
+
+    await refuses(proveCheck(program, holder, 'region', evidence), /not one this program serves/);
+    await refuses(
+      program.chain.callWithWitnesses(region, { ...holder.privateState, ...evidence }, { get_allowed_region_path: ({ privateState }) => [privateState, savedAllowedPath] }, 'prove_in_region', holder.ticket, now(program)),
+      /not one this program serves/
+    );
+    // A region that is still served is unaffected.
+    const stillServed = await recordCheckEvidence(program, holder, 'region', goodAnswer(program, 'region', { regionCode: 'REGION-B' }));
+    await proveCheck(program, holder, 'region', stillServed);
+    assert.equal(program.chain.publicLedger(region).passes.member(holder.ticket), true);
   });
 });
 

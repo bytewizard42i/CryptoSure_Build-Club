@@ -20,12 +20,17 @@
 //   `local_secret_key` witness, hashes it, and compares the hash with the keys
 //   it has on file. The secret itself never leaves the device or the proof.
 //
-// ROLES (the same two in every contract)
+// THE ROLE THIS FILE DEFINES
 //   admin     configures the contract and appoints operators
-//   operator  the one outside party this contract trusts to feed it facts
-//             (a screening provider, an identity issuer, an education
-//             provider...). Contracts that take no outside facts simply never
-//             appoint one.
+//
+//   The OPERATOR role (the outside party a contract trusts to feed it facts)
+//   lives in lib/Operator.compact and is included only by the five check
+//   contracts. It used to live here, which gave the three contracts that
+//   take no outside facts an operator set and two role circuits that nothing
+//   could ever use. The Nov 25 2026 review flagged that dead surface; a
+//   contract that does not include lib/Operator now provably has no
+//   operator. A contract that includes lib/Operator must include THIS file
+//   first.
 //
 // IDEAS, NOT BUILT
 //   - two-step admin handover (propose, then accept)
@@ -37,9 +42,8 @@
 // The caller's secret key, supplied by their own device. NEVER disclosed.
 witness local_secret_key(): Bytes<32>;
 
-// Who may configure this contract, and who may feed it facts.
+// Who may configure this contract.
 export ledger admins: Set<Bytes<32>>;
-export ledger operators: Set<Bytes<32>>;
 
 // How many admins there are. Kept so the last one can never be removed.
 export ledger adminCount: Uint<64>;
@@ -72,10 +76,6 @@ circuit assert_is_admin(): [] {
   assert(admins.member(disclose(caller_role_key())), "Caller is not an admin");
 }
 
-circuit assert_is_operator(): [] {
-  assert(operators.member(disclose(caller_role_key())), "Caller is not an approved operator");
-}
-
 // Called by every contract's constructor. The first admin is fixed at the
 // moment of deployment, as an argument, so there is no window in which a
 // stranger could claim a freshly deployed contract.
@@ -103,14 +103,4 @@ export circuit remove_admin(admin_key: Bytes<32>): [] {
   assert(adminCount > 1, "The last admin cannot be removed");
   admins.remove(k);
   adminCount = (adminCount - 1) as Uint<64>;
-}
-
-export circuit add_operator(operator_key: Bytes<32>): [] {
-  assert_is_admin();
-  operators.insert(disclose(operator_key));
-}
-
-export circuit remove_operator(operator_key: Bytes<32>): [] {
-  assert_is_admin();
-  operators.remove(disclose(operator_key));
 }

@@ -29,8 +29,28 @@
 //   A check that goes stale quickly (a ban list) can have a short one; a
 //   slow-changing check (identity) a long one.
 //
+// REVOKING A PASS
+//   Until the Nov 25 2026 review a pass ended only by expiring, so a wallet
+//   that landed on a ban list kept its pass, and any clearance resting on
+//   it, until the shelf life ran out. `revoke_pass` now removes a pass at
+//   once. Either the contract's operator or its admin may call it (see
+//   lib/Operator): the operator because it is the party that learns its own
+//   evidence was wrong, the admin because the operator may have gone silent.
+//
+//   REVOKING A PASS IS ONLY HALF THE JOB. The evidence that earned the pass
+//   is still in the tree, so the holder can re-prove it and get the pass
+//   straight back. To put a holder out, revoke the EVIDENCE too (each check
+//   has a `revoke_*(index)` circuit for its own tree). Revoking the pass is
+//   the fast, cheap half that takes effect in one transaction; revoking the
+//   evidence is what makes it stick.
+//
+// A HOLDER CANNOT WEAKEN THEIR OWN PASS
+//   `record_pass` used to insert unconditionally, so proving again with
+//   weaker or shorter evidence replaced a stronger pass with a worse one.
+//   Only the holder could do it, so it was self-harm rather than an attack,
+//   but it was also pure downside: it is now refused.
+//
 // IDEAS, NOT BUILT
-//   - revoking a single pass (today a pass ends only by expiring)
 //   - charging a fee when a pass is recorded
 //   - emitting an event so an indexer can follow passes without polling
 // ============================================================================
@@ -46,8 +66,11 @@ export ledger passes: Map<Bytes<32>, PassRecord>;
 // How long a pass from this contract stays good, in seconds.
 export ledger shelfLifeSeconds: Uint<64>;
 
-// How many passes this contract has ever recorded (dashboards).
+// How many passes this contract has ever recorded, and how many have been
+// revoked before expiry (dashboards).
 export ledger passCount: Counter;
+
+export ledger passesRevoked: Counter;
 
 export circuit set_shelf_life(seconds: Uint<64>): [] {
   assert_is_admin();
@@ -75,8 +98,31 @@ circuit pass_expiry(issued_at: Uint<64>, evidence_expires_at: Uint<64>): Uint<64
 circuit record_pass(ticket: Bytes<32>, level: Uint<8>, valid_until: Uint<64>): [] {
   assert(level > 0, "A pass must have a level above zero");
   assert(blockTimeLt(valid_until), "The evidence for this pass has already expired");
+  // Never replace a pass with a worse one. A stronger level always wins; at
+  // the same level the expiry must not move backwards. Re-proving with
+  // better evidence, or later (so a longer shelf life), still works.
+  if (passes.member(ticket)) {
+    const current = passes.lookup(ticket);
+    assert(level > current.level || (level == current.level && valid_until >= current.validUntil),
+           "This ticket already holds a stronger or longer pass from this check"
+           );
+  }
   passes.insert(ticket, PassRecord { level: level, validUntil: valid_until });
   passCount.increment(1);
+}
+
+// OPERATOR or ADMIN: end a pass now, before it expires.
+//
+// The ticket is already public, so naming it here reveals nothing new. What
+// an observer learns is that this check withdrew its pass from this ticket,
+// which is the point: whoever relies on the pass must stop relying on it.
+// The REASON stays with the provider, as every other reason does.
+export circuit revoke_pass(ticket: Bytes<32>): [] {
+  assert_is_admin_or_operator();
+  const t = disclose(ticket);
+  assert(passes.member(t), "This ticket has no pass from this check");
+  passes.remove(t);
+  passesRevoked.increment(1);
 }
 
 // THE SHARED INTERFACE. Witness-free, so other contracts may call it.

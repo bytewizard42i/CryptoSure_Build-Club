@@ -10,7 +10,8 @@
 // WHO DOES WHAT
 //   operator  a region oracle (a black box to us). Decides where the holder
 //             is, off-chain, and records a hidden attestation here.
-//   admin     publishes the regions the program may serve.
+//   admin     publishes the regions the program may serve, and can withdraw
+//             one again.
 //   holder    proves their attestation exists, has not expired, and names an
 //             allowed region. Gets a pass.
 //
@@ -18,7 +19,6 @@
 //   That SOME allowed region matched. Not which one, and not who.
 //
 // IDEAS, NOT BUILT
-//   - a deny-list of regions as well as an allow-list
 //   - different allowed regions per cover class (today one list per contract;
 //     deploy a second RegionCheck for a second program)
 //   - proving "in region" without any oracle, from a signed location source
@@ -29,6 +29,7 @@ pragma language_version >= 0.28;
 import CompactStandardLibrary;
 
 include "../lib/Common";
+include "../lib/Operator";
 include "../lib/Ticket";
 include "../lib/Pass";
 include "../lib/Membership";
@@ -42,6 +43,14 @@ struct RegionAttestation {
 
 export ledger attestations: HistoricMerkleTree<16, Bytes<32>>;
 export ledger allowedRegions: HistoricMerkleTree<8, Bytes<32>>;
+
+// Insertion counts for both trees. A count is the index the next insert
+// will land at, and so the only way an operator or admin can know which
+// index to revoke later. Blanking never frees an index, so they only go up.
+export ledger attestationsRecorded: Counter;
+export ledger attestationsRevoked: Counter;
+export ledger regionsAllowed: Counter;
+export ledger regionsWithdrawn: Counter;
 
 witness get_region_attestation(): RegionAttestation;
 witness get_region_attestation_salt(): Bytes<32>;
@@ -62,16 +71,51 @@ export circuit derive_region_leaf(code: Bytes<32>): Bytes<32> {
   ]);
 }
 
-// Public helper: seals a region attestation exactly the way the proof re-computes it, so
-// off-chain code never has to guess the byte layout.
+// Public helper: seals a region attestation exactly the way the proof
+// re-computes it, so off-chain code never has to guess the byte layout.
+//
+// THE TYPE TAG
+//   `RegionAttestation` is {Bytes<32>, Bytes<32>, Uint<64>} — the same shape
+//   as `ControlAttestation` in WalletControlCheck.compact, whose second field
+//   is a wallet hash rather than a region leaf. Without a tag the two seal to
+//   the same 32 bytes. See the longer note on `commit_identity_credential` in
+//   IdentityCheck.compact.
 export circuit commit_region_attestation(body: RegionAttestation, salt: Bytes<32>): Bytes<32> {
-  return persistentCommit<RegionAttestation>(body, salt);
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:region:attestation:"),
+    persistentCommit<RegionAttestation>(body, salt)
+  ]);
 }
 
-// ADMIN: allow a region.
+// ADMIN: allow a region. It lands at index `regionsAllowed`, the value the
+// counter has as this call begins; keep that index to withdraw it later.
 export circuit add_allowed_region(code: Bytes<32>): [] {
   assert_is_admin();
   allowedRegions.insert(disclose(derive_region_leaf(code)));
+  regionsAllowed.increment(1);
+}
+
+// ADMIN: stop serving a region, by the index it was allowed at. A program
+// that loses a licence needs this on the day it loses it, and until the
+// Nov 25 2026 review the allow-list could only ever grow.
+//
+// WHY BY INDEX AND NOT BY REGION CODE. The whole point of holding the
+// allow-list in a Merkle tree is that a holder proves "my region is in the
+// list" without saying which region, and a circuit cannot search a tree. A
+// public `Set` would let the list be edited by name, but then proving
+// membership would mean disclosing the region, which is the privacy this
+// check exists to protect. So: index, with the counter above to track it.
+//
+// resetHistory() is required for the same reason as everywhere else: without
+// it a holder proves against a root from before the region was withdrawn.
+// See the long note at the top of checks/IdentityCheck.compact.
+export circuit remove_allowed_region(index: Uint<64>): [] {
+  assert_is_admin();
+  const i = disclose(index);
+  assert(i < regionsAllowed, "No region has been allowed at that index");
+  allowedRegions.insertIndexDefault(i);
+  allowedRegions.resetHistory();
+  regionsWithdrawn.increment(1);
 }
 
 // OPERATOR: record a sealed attestation. The opening (body + salt) is handed
@@ -79,6 +123,21 @@ export circuit add_allowed_region(code: Bytes<32>): [] {
 export circuit record_region_attestation(commitment: Bytes<32>): [] {
   assert_is_operator();
   attestations.insert(disclose(commitment));
+  attestationsRecorded.increment(1);
+}
+
+// OPERATOR or ADMIN: withdraw a region attestation, by the index it was
+// recorded at, for example when the oracle learns it placed someone wrongly.
+// Only the index is published, never the holder or the region. See the long
+// note at the top of checks/IdentityCheck.compact for why resetHistory() is
+// required.
+export circuit revoke_region_attestation(index: Uint<64>): [] {
+  assert_is_admin_or_operator();
+  const i = disclose(index);
+  assert(i < attestationsRecorded, "No attestation has been recorded at that index");
+  attestations.insertIndexDefault(i);
+  attestations.resetHistory();
+  attestationsRevoked.increment(1);
 }
 
 // HOLDER: prove I was placed in an allowed region.
@@ -89,7 +148,7 @@ export circuit prove_in_region(ticket: Bytes<32>, issued_at: Uint<64>): [] {
   const attestation = get_region_attestation();
   assert(attestation.holderPk == sealed_in_ticket.holderPk, "This region attestation is about someone else");
 
-  const leaf = persistentCommit<RegionAttestation>(attestation, get_region_attestation_salt());
+  const leaf = commit_region_attestation(attestation, get_region_attestation_salt());
   const root = root_for_leaf_16(leaf, get_region_attestation_path(leaf));
   assert(attestations.checkRoot(disclose(root)), "No such region attestation");
 

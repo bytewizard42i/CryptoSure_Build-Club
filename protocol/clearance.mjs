@@ -75,6 +75,26 @@ export function createHolder(program, { subjectId, wallet }) {
 }
 
 // ---------------------------------------------------------------------------
+// WHERE A PIECE OF EVIDENCE LANDS IN ITS TREE
+//
+// Each check contract can REVOKE one piece of evidence by blanking its leaf,
+// and it takes the leaf's INDEX to say which (see the long note at the top of
+// contracts/checks/IdentityCheck.compact for why an index and not a value).
+// A circuit cannot hand back the index that `insert` chose, so each contract
+// keeps a counter of insertions: its value just before a record call is the
+// index that call will land at.
+//
+// So every `record` below reads its contract's counter FIRST and returns the
+// index with the evidence. Whoever issued the evidence has to keep that index
+// to be able to withdraw it later. Nothing on-chain links the index to a
+// holder; it is bookkeeping for the issuer, like the policy record an insurer
+// keeps.
+// ---------------------------------------------------------------------------
+function nextLeafIndex(program, checkName, counterName) {
+  return Number(program.chain.publicLedger(program.checkAddress(checkName))[counterName]);
+}
+
+// ---------------------------------------------------------------------------
 // One entry per check: how to ask its provider, how its operator seals the
 // result, and which circuit the holder proves with. Adding a sixth check
 // means adding one entry here, one contract, and one slot in the config.
@@ -84,10 +104,12 @@ const CHECK_RUNNERS = {
     ask: ({ providers, holder, now }) => providers.banList.screen({ wallet: holder.wallet, now }),
     async record({ program, holder, answer }) {
       const listVersion = BigInt(answer.listVersion);
+      const leafIndex = nextLeafIndex(program, 'banList', 'screeningsRecorded');
       await program.chain.call(program.checkAddress('banList'), program.operators.banList, 'record_screening', { walletHash: holder.privateState.walletHash, listVersion });
-      return { listVersion };
+      return { listVersion, leafIndex };
     },
     proveCircuit: 'prove_not_listed',
+    revokeEvidenceCircuit: 'revoke_screening',
     level: () => 1
   },
 
@@ -102,10 +124,12 @@ const CHECK_RUNNERS = {
       const controlAttestationSalt = random32Bytes();
       const address = program.checkAddress('walletControl');
       const commitment = program.chain.pureCircuits(address).commit_control_attestation(controlAttestation, controlAttestationSalt);
+      const leafIndex = nextLeafIndex(program, 'walletControl', 'attestationsRecorded');
       await program.chain.call(address, program.operators.walletControl, 'record_control_attestation', commitment);
-      return { controlAttestation, controlAttestationSalt };
+      return { controlAttestation, controlAttestationSalt, leafIndex };
     },
     proveCircuit: 'prove_wallet_control',
+    revokeEvidenceCircuit: 'revoke_control_attestation',
     level: () => 1
   },
 
@@ -116,10 +140,12 @@ const CHECK_RUNNERS = {
       const pure = program.chain.pureCircuits(address);
       const regionAttestation = { holderPk: holder.holderPublicKey, regionLeaf: pure.derive_region_leaf(padTo32Bytes(answer.regionCode)), expiresAt: BigInt(answer.expiresAt) };
       const regionAttestationSalt = random32Bytes();
+      const leafIndex = nextLeafIndex(program, 'region', 'attestationsRecorded');
       await program.chain.call(address, program.operators.region, 'record_region_attestation', pure.commit_region_attestation(regionAttestation, regionAttestationSalt));
-      return { regionAttestation, regionAttestationSalt };
+      return { regionAttestation, regionAttestationSalt, leafIndex };
     },
     proveCircuit: 'prove_in_region',
+    revokeEvidenceCircuit: 'revoke_region_attestation',
     level: () => 1
   },
 
@@ -129,10 +155,12 @@ const CHECK_RUNNERS = {
       const identityCredential = { holderPk: holder.holderPublicKey, level: BigInt(answer.level), credentialId: hexToBytes(answer.credentialId), expiresAt: BigInt(answer.expiresAt) };
       const identityCredentialSalt = random32Bytes();
       const address = program.checkAddress('identity');
+      const leafIndex = nextLeafIndex(program, 'identity', 'credentialsIssued');
       await program.chain.call(address, program.operators.identity, 'issue_credential', program.chain.pureCircuits(address).commit_identity_credential(identityCredential, identityCredentialSalt));
-      return { identityCredential, identityCredentialSalt };
+      return { identityCredential, identityCredentialSalt, leafIndex };
     },
     proveCircuit: 'prove_identity',
+    revokeEvidenceCircuit: 'revoke_credential',
     level: (answer) => answer.level
   },
 
@@ -142,13 +170,36 @@ const CHECK_RUNNERS = {
       const educationCertificate = { holderPk: holder.holderPublicKey, level: BigInt(answer.level), certificateId: hexToBytes(answer.certificateId), expiresAt: BigInt(answer.expiresAt) };
       const educationCertificateSalt = random32Bytes();
       const address = program.checkAddress('education');
+      const leafIndex = nextLeafIndex(program, 'education', 'certificatesIssued');
       await program.chain.call(address, program.operators.education, 'issue_certificate', program.chain.pureCircuits(address).commit_education_certificate(educationCertificate, educationCertificateSalt));
-      return { educationCertificate, educationCertificateSalt };
+      return { educationCertificate, educationCertificateSalt, leafIndex };
     },
     proveCircuit: 'prove_education',
+    revokeEvidenceCircuit: 'revoke_certificate',
     level: (answer) => answer.level
   }
 };
+
+/**
+ * Step 2 alone: the operator seals the provider's answer into the check's
+ * contract. Returns the evidence the holder needs to prove it, including the
+ * `leafIndex` the issuer must keep in order to revoke it later.
+ *
+ * Separate from proving so that tests, and real operators, can record
+ * evidence and then do something other than prove it next.
+ */
+export async function recordCheckEvidence(program, holder, checkName, answer) {
+  const runner = CHECK_RUNNERS[checkName];
+  if (runner === undefined) throw new TypeError(`There is no check named "${checkName}".`);
+  return runner.record({ program, holder, answer });
+}
+
+/** Step 3 alone: the holder proves evidence already recorded, and collects the pass. */
+export async function proveCheck(program, holder, checkName, evidence) {
+  const runner = CHECK_RUNNERS[checkName];
+  if (runner === undefined) throw new TypeError(`There is no check named "${checkName}".`);
+  return program.chain.call(program.checkAddress(checkName), { ...holder.privateState, ...evidence }, runner.proveCircuit, holder.ticket, BigInt(program.chain.now));
+}
 
 /**
  * Steps 2 and 3 for one check: the operator seals the provider's answer into
@@ -158,11 +209,51 @@ const CHECK_RUNNERS = {
  * Throws ContractRejectedError if a contract refuses.
  */
 export async function recordAndProveCheck(program, holder, checkName, answer) {
+  const evidence = await recordCheckEvidence(program, holder, checkName, answer);
+  await proveCheck(program, holder, checkName, evidence);
+  return evidence;
+}
+
+/**
+ * Withdraw one piece of evidence from a check's tree, so it can never be
+ * proven again. `leafIndex` is the number `recordAndProveCheck` returned with
+ * the evidence; the issuer is the only party that has it.
+ *
+ * Takes effect for FUTURE proofs. A pass the holder already collected from
+ * this evidence stays where it is until it expires, so to put a holder out
+ * now, call revokePass() as well. The contracts say the same thing in
+ * contracts/lib/Pass.compact.
+ *
+ * @param actor  the check's operator or its admin
+ */
+export async function revokeEvidence(program, checkName, leafIndex, actor = program.operators[checkName]) {
   const runner = CHECK_RUNNERS[checkName];
   if (runner === undefined) throw new TypeError(`There is no check named "${checkName}".`);
-  const evidence = await runner.record({ program, holder, answer });
-  await program.chain.call(program.checkAddress(checkName), { ...holder.privateState, ...evidence }, runner.proveCircuit, holder.ticket, BigInt(program.chain.now));
-  return evidence;
+  if (!Number.isInteger(leafIndex) || leafIndex < 0) throw new TypeError('revokeEvidence needs the whole-number leaf index the evidence was recorded at.');
+  return program.chain.call(program.checkAddress(checkName), actor, runner.revokeEvidenceCircuit, BigInt(leafIndex));
+}
+
+/**
+ * End one pass now, before it expires. The ticket is already public, so this
+ * names it; the reason stays with the provider.
+ *
+ * @param actor  the check's operator or its admin
+ */
+export async function revokePass(program, checkName, ticket, actor = program.operators[checkName]) {
+  if (!(checkName in CHECK_RUNNERS)) throw new TypeError(`There is no check named "${checkName}".`);
+  return program.chain.call(program.checkAddress(checkName), actor, 'revoke_pass', ticket);
+}
+
+/**
+ * End one clearance now, before it expires. Admin only.
+ *
+ * This stops everything that asks `require_clearance` (PolicyBinder,
+ * PairReceipt) at once. It does NOT stop the holder granting it again if the
+ * underlying passes are still good: revoke those too. See
+ * contracts/ClearanceRegistry.compact.
+ */
+export async function revokeClearance(program, ticket, profileName, actor = program.admin) {
+  return program.chain.call(program.addresses.ClearanceRegistry, actor, 'revoke_clearance', ticket, padTo32Bytes(profileName));
 }
 
 // Does the ticket already hold a current pass of at least this level?

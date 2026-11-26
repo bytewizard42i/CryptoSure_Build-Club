@@ -37,6 +37,7 @@ pragma language_version >= 0.28;
 import CompactStandardLibrary;
 
 include "../lib/Common";
+include "../lib/Operator";
 include "../lib/Ticket";
 include "../lib/Pass";
 include "../lib/Membership";
@@ -50,6 +51,12 @@ struct ControlAttestation {
 
 export ledger attestations: HistoricMerkleTree<16, Bytes<32>>;
 
+// How many attestations have been RECORDED, ever: the index the next one
+// will land at, and so the only way the verifier can know which index to
+// revoke.
+export ledger attestationsRecorded: Counter;
+export ledger attestationsRevoked: Counter;
+
 witness get_control_attestation(): ControlAttestation;
 witness get_control_attestation_salt(): Bytes<32>;
 witness get_control_attestation_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
@@ -60,16 +67,41 @@ constructor(first_admin: Bytes<32>) {
   shelfLifeSeconds = 2592000;   // 30 days
 }
 
-// Public helper: seals a wallet-control attestation exactly the way the proof re-computes it, so
-// off-chain code never has to guess the byte layout.
+// Public helper: seals a wallet-control attestation exactly the way the proof
+// re-computes it, so off-chain code never has to guess the byte layout.
+//
+// THE TYPE TAG
+//   `ControlAttestation` has the same shape as `RegionAttestation` in
+//   RegionCheck.compact, so without a tag the two seal to the same 32 bytes.
+//   This is the pair that mattered most: a region attestation says nothing
+//   about a wallet, and a wallet-control attestation is what proves a holder
+//   controls the wallet in their ticket. See the longer note on
+//   `commit_identity_credential` in IdentityCheck.compact.
 export circuit commit_control_attestation(body: ControlAttestation, salt: Bytes<32>): Bytes<32> {
-  return persistentCommit<ControlAttestation>(body, salt);
+  return persistentHash<Vector<2, Bytes<32>>>([
+    pad(32, "cryptosure:control:attestation:"),
+    persistentCommit<ControlAttestation>(body, salt)
+  ]);
 }
 
 // OPERATOR: record a sealed attestation after checking the signature.
 export circuit record_control_attestation(commitment: Bytes<32>): [] {
   assert_is_operator();
   attestations.insert(disclose(commitment));
+  attestationsRecorded.increment(1);
+}
+
+// OPERATOR or ADMIN: withdraw an attestation, by the index it was recorded
+// at — the "a wallet that changed hands" case. Only the index is published,
+// never the holder or the wallet. See the long note at the top of
+// checks/IdentityCheck.compact for why resetHistory() is required.
+export circuit revoke_control_attestation(index: Uint<64>): [] {
+  assert_is_admin_or_operator();
+  const i = disclose(index);
+  assert(i < attestationsRecorded, "No attestation has been recorded at that index");
+  attestations.insertIndexDefault(i);
+  attestations.resetHistory();
+  attestationsRevoked.increment(1);
 }
 
 // HOLDER: prove the attestation is about me and about the wallet in my ticket.
@@ -81,7 +113,7 @@ export circuit prove_wallet_control(ticket: Bytes<32>, issued_at: Uint<64>): [] 
   assert(attestation.holderPk == sealed_in_ticket.holderPk, "This attestation is about a different holder");
   assert(attestation.walletHash == sealed_in_ticket.walletHash, "This attestation is about a different wallet");
 
-  const leaf = persistentCommit<ControlAttestation>(attestation, get_control_attestation_salt());
+  const leaf = commit_control_attestation(attestation, get_control_attestation_salt());
   const root = root_for_leaf_16(leaf, get_control_attestation_path(leaf));
   assert(attestations.checkRoot(disclose(root)), "No such wallet-control attestation");
 

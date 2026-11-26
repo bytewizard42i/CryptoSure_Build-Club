@@ -42,6 +42,7 @@ pragma language_version >= 0.28;
 import CompactStandardLibrary;
 
 include "../lib/Common";
+include "../lib/Operator";
 include "../lib/Ticket";
 include "../lib/Pass";
 include "../lib/Membership";
@@ -55,6 +56,12 @@ struct ScreeningBody {
 // Screening results, as hidden leaves. "Historic" means a proof made against
 // a slightly older root still verifies after new leaves are added.
 export ledger screenings: HistoricMerkleTree<16, Bytes<32>>;
+
+// How many results have been RECORDED, ever: the index the next one will
+// land at, and so the only way the operator can know which index to revoke.
+// Blanking a leaf never frees its index, so this only goes up.
+export ledger screeningsRecorded: Counter;
+export ledger screeningsRevoked: Counter;
 
 // Results from list versions older than this are no longer accepted.
 export ledger minAcceptedListVersion: Uint<64>;
@@ -83,6 +90,25 @@ export circuit derive_screening_leaf(body: ScreeningBody): Bytes<32> {
 export circuit record_screening(body: ScreeningBody): [] {
   assert_is_operator();
   screenings.insert(disclose(derive_screening_leaf(body)));
+  screeningsRecorded.increment(1);
+}
+
+// OPERATOR or ADMIN: withdraw a screening result, by the index it was
+// recorded at, when the wallet turns up on the list after all. Only the
+// index is published, never the wallet.
+//
+// This is the circuit the "a wallet that lands on the ban list" story needs.
+// Pair it with `revoke_pass(ticket)`: this one stops the holder re-proving,
+// that one takes away the pass they already hold. For the full reasoning,
+// including why resetHistory() is required and not merely tidy, see the long
+// note at the top of checks/IdentityCheck.compact.
+export circuit revoke_screening(index: Uint<64>): [] {
+  assert_is_admin_or_operator();
+  const i = disclose(index);
+  assert(i < screeningsRecorded, "No screening result has been recorded at that index");
+  screenings.insertIndexDefault(i);
+  screenings.resetHistory();
+  screeningsRevoked.increment(1);
 }
 
 // ADMIN: raise the freshness floor after the list is refreshed.

@@ -1,0 +1,58 @@
+// ============================================================================
+// lib/Operator.compact — the OPTIONAL operator role
+// ============================================================================
+//
+// WHAT AN OPERATOR IS
+//   The one outside party a contract trusts to feed it facts: a screening
+//   provider, an identity issuer, an education provider, a region oracle, a
+//   signature verifier. An operator may record sealed evidence, and revoke
+//   evidence it recorded. It may not configure the contract; that is the
+//   admin's job (lib/Common).
+//
+// WHY THIS IS A SEPARATE FILE FROM lib/Common
+//   Only the five CHECK contracts take facts from outside. The three that do
+//   not (ClearanceRegistry, PairReceipt, PolicyBinder) work entirely from
+//   public ledger state and their callers' proofs, so they have no operator
+//   and never appoint one.
+//
+//   Until the Nov 25 2026 review this role lived in lib/Common, which every
+//   contract includes, so those three carried an `operators` set, an
+//   `add_operator` circuit and a `remove_operator` circuit that nothing
+//   could ever use. That is three live, admin-callable circuits of dead
+//   surface per contract: state an auditor has to reason about, circuits a
+//   confused admin could call, and proving keys paid for at compile time.
+//   Splitting the role out means a contract that does not include this file
+//   provably has no operator.
+//
+// INCLUDE ORDER
+//   This file uses `caller_role_key()` and `admins` from lib/Common, so a
+//   contract must include lib/Common BEFORE lib/Operator.
+// ============================================================================
+
+// Who may feed this contract facts.
+export ledger operators: Set<Bytes<32>>;
+
+circuit assert_is_operator(): [] {
+  assert(operators.member(disclose(caller_role_key())), "Caller is not an approved operator");
+}
+
+// Revoking evidence is something EITHER party may need to do in a hurry: the
+// operator because it learns its own evidence was wrong, the admin because
+// the operator has gone silent or rogue. Both are already trusted with this
+// contract's content, so neither gains anything it did not already have.
+circuit assert_is_admin_or_operator(): [] {
+  const k = disclose(caller_role_key());
+  assert(admins.member(k) || operators.member(k),
+         "Caller is neither an admin nor an approved operator"
+         );
+}
+
+export circuit add_operator(operator_key: Bytes<32>): [] {
+  assert_is_admin();
+  operators.insert(disclose(operator_key));
+}
+
+export circuit remove_operator(operator_key: Bytes<32>): [] {
+  assert_is_admin();
+  operators.remove(disclose(operator_key));
+}

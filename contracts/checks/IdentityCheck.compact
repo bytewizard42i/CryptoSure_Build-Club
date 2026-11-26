@@ -9,9 +9,10 @@
 //
 // WHO DOES WHAT
 //   operator  an identity issuer (a black box to us). Verifies the person
-//             off-chain and records a hidden credential here. Can revoke.
-//   holder    proves the credential is theirs, current and not revoked.
-//             Gets a pass carrying the credential's LEVEL.
+//             off-chain and records a hidden credential here. Can revoke it
+//             again, by index, without publishing anything about it.
+//   holder    proves the credential is theirs and current. Gets a pass
+//             carrying the credential's LEVEL.
 //
 // LEVELS
 //   1 = basic verification, 2 = enhanced. The pass records the level, and
@@ -20,18 +21,58 @@
 //   knowing anything about cover.
 //
 // WHAT THE CHAIN SEES
-//   The level reached, an expiry, and a revocation nullifier.
+//   The level reached and an expiry. Nothing derived from the credential.
 //
-// A PRIVACY LIMIT, STATED PLAINLY
-//   The revocation nullifier is a hash of the credential id alone, and it is
-//   published every time the credential is used. So:
-//     - every ticket backed by the same credential is linkable to the others,
-//       including a "fresh" ticket made later
-//     - the ISSUER, who knows the credential id, can compute the nullifier
-//       and recognise which tickets belong to a person it verified
-//   Outsiders learn neither the person nor the credential. Removing the
-//   issuer's ability needs a different revocation design (for example a
-//   non-membership proof) and is not done here.
+// HOW REVOCATION WORKS, AND WHY IT IS BUILT THIS WAY
+//   The first version published a "revocation nullifier", hash(credential
+//   id), every time a credential was used, and kept a set of revoked ones.
+//   That worked, and it leaked badly. The Nov 25 2026 review called it the
+//   worst privacy flaw left in these contracts:
+//     - every ticket backed by one credential carried the SAME nullifier, so
+//       all of them were linkable to each other, including a "fresh" ticket
+//       made later with a new salt
+//     - the ISSUER knows the credential id, so it could compute the
+//       nullifier and pick out exactly which anonymous tickets belonged to a
+//       person it had verified
+//   No amount of hashing fixes that: any value the issuer can recompute and
+//   the holder must publish is a linking tag by construction.
+//
+//   So nothing credential-derived is published any more. Revocation moved
+//   from the HOLDER's proof to the ISSUER's side of the tree:
+//
+//     issue    the issuer appends the sealed credential to `credentials` and
+//              `credentialsIssued` counts it. Because MerkleTree.insert
+//              appends at the next free index, the index of a credential is
+//              the counter's value just before it was inserted, which is how
+//              the issuer knows which index to revoke later.
+//     revoke   `revoke_credential(index)` blanks that leaf with
+//              insertIndexDefault, then calls resetHistory().
+//     prove    the holder proves membership of their leaf in the tree, as
+//              before. A blanked leaf is not in the tree, so it cannot be
+//              proven, and the holder publishes only a Merkle root.
+//
+//   resetHistory() IS LOAD-BEARING, NOT TIDINESS. A HistoricMerkleTree
+//   accepts a proof against ANY root it has ever had. Blanking a leaf
+//   without clearing that history leaves every pre-revocation root valid, so
+//   a revoked holder simply proves against an older root and the revocation
+//   does nothing. This was confirmed by experiment against compiler 0.36.1
+//   before the change was written: with resetHistory() a replayed
+//   pre-revocation path is refused ("No such identity credential"); without
+//   it, the same path still proves.
+//
+//   WHAT THIS COSTS. resetHistory() invalidates in-flight proofs: a holder
+//   who built a proof against a root that a revocation then cleared must
+//   build it again. Revocation is rare and re-proving is cheap, so that is
+//   the right way round. Ordinary issuance still does NOT disturb anyone,
+//   which is why the tree stays Historic rather than becoming a plain
+//   MerkleTree.
+//
+//   WHAT IS STILL VISIBLE. `revoke_credential` discloses the INDEX it
+//   blanks, so an observer learns "the credential recorded in the Nth
+//   issuance transaction was revoked". That is a statement about an issuance
+//   transaction, not about a ticket, a holder or a person, and it cannot be
+//   joined to any ticket. See docs/design/protocol.md for the residual risks
+//   that remain.
 //
 // IDEAS, NOT BUILT
 //   - verifying the issuer's signature inside the proof, so no on-chain
@@ -46,23 +87,43 @@ pragma language_version >= 0.28;
 import CompactStandardLibrary;
 
 include "../lib/Common";
+
+include "../lib/Operator";
+
 include "../lib/Ticket";
+
 include "../lib/Pass";
+
 include "../lib/Membership";
 
 // What the issuer's hidden credential commits to.
 struct IdentityCredential {
   holderPk: Bytes<32>;       // who it was issued to
   level: Uint<8>;            // 1 = basic, 2 = enhanced
-  credentialId: Bytes<32>;   // random id shared by issuer and holder
+  // A random id shared by issuer and holder. No longer used for revocation
+  // (see the note at the top of this file); it is what keeps two credentials
+  // with the same holder, level and expiry from sealing to the same bytes.
+  credentialId: Bytes<32>;
   expiresAt: Uint<64>;       // unix seconds; issuers should round this coarsely
 }
 
 export ledger credentials: HistoricMerkleTree<16, Bytes<32>>;
-export ledger revokedCredentials: Set<Bytes<32>>;
+
+// How many credentials have been INSERTED, ever. Two jobs:
+//   - it is the index the next insert will land at, which is the only way
+//     the issuer can learn which index to revoke later (a circuit cannot
+//     hand back the index `insert` chose)
+//   - blanking a leaf does not free its index for reuse, so this only ever
+//     goes up and stays a correct index even after revocations
+export ledger credentialsIssued: Counter;
+
+// How many have been revoked (dashboards; it says nothing about which).
+export ledger credentialsRevoked: Counter;
 
 witness get_identity_credential(): IdentityCredential;
+
 witness get_identity_credential_salt(): Bytes<32>;
+
 witness get_identity_credential_path(leaf: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 
 // `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
@@ -71,33 +132,49 @@ constructor(first_admin: Bytes<32>) {
   shelfLifeSeconds = 7776000;   // 90 days: identity changes slowly
 }
 
-// The value published when a credential is revoked. It is a hash of the
-// credential id under its own prefix, so it reveals nothing about the holder.
-export circuit derive_revocation_nullifier(credential_id: Bytes<32>): Bytes<32> {
-  return persistentHash<Vector<2, Bytes<32>>>([
-    pad(32, "cryptosure:identity:revoke:"),
-    credential_id
-  ]);
-}
-
-// Public helper: seals an identity credential exactly the way the proof re-computes it, so
-// off-chain code never has to guess the byte layout.
+// Public helper: seals an identity credential exactly the way the proof
+// re-computes it, so off-chain code never has to guess the byte layout.
+//
+// THE TYPE TAG
+//   `IdentityCredential` is {Bytes<32>, Uint<8>, Bytes<32>, Uint<64>} — the
+//   same shape, field for field, as `EducationCertificate` in
+//   EducationCheck.compact. Two structs of the same shape commit to the SAME
+//   32 bytes, so without a tag an education certificate and an identity
+//   credential are the same sealed value. Today each lives in its own tree in
+//   its own contract, so there is no live exploit; the day a tree is shared,
+//   a contract is reused, or a check is re-pointed at another's tree, there
+//   would be. Hashing the commitment under a per-type tag makes the two
+//   provably distinct values, at the cost of one extra hash.
+//   (Nov 25 2026 review, "sealed evidence structs carry no type tag".)
 export circuit commit_identity_credential(body: IdentityCredential, salt: Bytes<32>): Bytes<32> {
-  return persistentCommit<IdentityCredential>(body, salt);
+  return persistentHash<Vector<2, Bytes<32>>>(
+           [pad(32, "cryptosure:identity:credential:"),
+            persistentCommit<IdentityCredential>(body, salt)]
+           );
 }
 
-// OPERATOR: record a sealed credential.
+// OPERATOR: record a sealed credential. It lands at index
+// `credentialsIssued`, the value the counter has as this call begins; the
+// issuer must keep that index in its own records to be able to revoke.
 export circuit issue_credential(commitment: Bytes<32>): [] {
   assert_is_operator();
   credentials.insert(disclose(commitment));
+  credentialsIssued.increment(1);
 }
 
-// OPERATOR: revoke one. Publishes only the nullifier.
-export circuit revoke_credential(credential_id: Bytes<32>): [] {
-  assert_is_operator();
-  const nullifier = disclose(derive_revocation_nullifier(credential_id));
-  assert(!revokedCredentials.member(nullifier), "This credential is already revoked");
-  revokedCredentials.insert(nullifier);
+// OPERATOR or ADMIN: revoke the credential at `index` by blanking its leaf.
+// Nothing about the credential is published: only the index.
+//
+// resetHistory() is what makes this real. Without it the pre-revocation
+// roots stay acceptable and the holder just proves against one of them. See
+// the long note at the top of this file.
+export circuit revoke_credential(index: Uint<64>): [] {
+  assert_is_admin_or_operator();
+  const i = disclose(index);
+  assert(i < credentialsIssued, "No credential has been issued at that index");
+  credentials.insertIndexDefault(i);
+  credentials.resetHistory();
+  credentialsRevoked.increment(1);
 }
 
 // HOLDER: prove my identity credential and record its level.
@@ -108,12 +185,13 @@ export circuit prove_identity(ticket: Bytes<32>, issued_at: Uint<64>): [] {
   const credential = get_identity_credential();
   assert(credential.holderPk == sealed_in_ticket.holderPk, "This identity credential belongs to someone else");
 
-  const leaf = persistentCommit<IdentityCredential>(credential, get_identity_credential_salt());
+  // Membership in the tree is now the WHOLE test: a revoked credential's
+  // leaf has been blanked, so it is no longer in the tree and no longer has
+  // a path. There is no separate revocation check and, deliberately, no
+  // published value derived from the credential.
+  const leaf = commit_identity_credential(credential, get_identity_credential_salt());
   const root = root_for_leaf_16(leaf, get_identity_credential_path(leaf));
   assert(credentials.checkRoot(disclose(root)), "No such identity credential");
-
-  const nullifier = disclose(derive_revocation_nullifier(credential.credentialId));
-  assert(!revokedCredentials.member(nullifier), "This identity credential has been revoked");
 
   record_pass(t, disclose(credential.level), disclose(pass_expiry(disclose(issued_at), credential.expiresAt)));
 }

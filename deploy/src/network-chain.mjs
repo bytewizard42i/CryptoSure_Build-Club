@@ -59,6 +59,61 @@ const CLOCK_SAFETY_MARGIN_SECONDS = 30;
 // wrapped by the runtime as "... failed assert: <the contract's sentence>".
 const FAILED_ASSERT_PATTERN = /failed assert:\s*/i;
 
+// ----------------------------------------------------------------------------
+// Throttle-aware retry
+// ----------------------------------------------------------------------------
+// Midnight nodes rate-limit each account (pallet_throttle): too many bytes in
+// too short a window and the node rejects a transaction AT VALIDATION with
+// "1010: Invalid Transaction: Transaction would exhaust the block limits".
+// A validation rejection never reached a block, so re-sending the SAME
+// transaction later is safe: nothing was applied, nothing can be applied
+// twice. Large deploy transactions are the ones most likely to hit the cap,
+// and the cap refills with time, so the right answer is to wait and try
+// again rather than to fail the whole deployment run.
+const THROTTLE_REJECTION_PATTERN = /exhaust the block limits/i;
+
+// How long to wait before trying again, and how many times. The window length
+// is not documented, so these are generous: worst case one transaction waits
+// about fifteen minutes before the run gives up.
+const THROTTLE_RETRY_DELAY_MS = 65_000;
+const THROTTLE_RETRY_ATTEMPTS = 15;
+
+/** Every message in an error's cause chain, concatenated, for pattern checks. */
+function deepErrorText(error) {
+  const parts = [];
+  for (let current = error; current; current = current.cause) {
+    if (current.message) parts.push(String(current.message));
+  }
+  return parts.join(' | ');
+}
+
+function isThrottleRejection(error) {
+  return THROTTLE_REJECTION_PATTERN.test(deepErrorText(error));
+}
+
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+/**
+ * Run `operation`, retrying when - and only when - the node rejects it at
+ * validation for exhausting the per-account throttle. Any other error
+ * (a contract assert, a missing proof server, a real failure) is thrown
+ * straight away: retrying those would only waste time and hide the cause.
+ */
+async function withThrottleRetry(label, operation) {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isThrottleRejection(error) || attempt >= THROTTLE_RETRY_ATTEMPTS) throw error;
+      console.log(
+        `  throttle: the node is rate-limiting this account; waiting ` +
+        `${THROTTLE_RETRY_DELAY_MS / 1000}s before retry ${attempt + 1}/${THROTTLE_RETRY_ATTEMPTS} of ${label}`
+      );
+      await sleep(THROTTLE_RETRY_DELAY_MS);
+    }
+  }
+}
+
 function contractRejectionMessage(error) {
   return String(error?.message ?? error).replace(/^.*failed assert:\s*/is, '').trim();
 }
@@ -132,14 +187,14 @@ export class NetworkChain {
    */
   async deploy(contractName, ...constructorArguments) {
     const loaded = await loadCompiledContract(contractName);
-    const deployed = await deployContract(this.#providerFactory.forContract(loaded), {
+    const deployed = await withThrottleRetry(`deploy ${contractName}`, () => deployContract(this.#providerFactory.forContract(loaded), {
       compiledContract: loaded.compiledContract,
       // The constructor reads no witnesses; an empty private state is stored
       // so later calls have a slot to overwrite.
       privateStateId: CALLER_PRIVATE_STATE_ID,
       initialPrivateState: {},
       args: constructorArguments
-    });
+    }));
     const { contractAddress, txId, blockHeight, status } = deployed.deployTxData.public;
     if (status !== 'SucceedEntirely') {
       throw new Error(`Deploying ${contractName} was included in block ${blockHeight} but did NOT succeed (status "${status}", tx ${txId}).`);
@@ -199,7 +254,7 @@ export class NetworkChain {
 
     let finalized;
     try {
-      finalized = await callTransaction(...circuitArguments);
+      finalized = await withThrottleRetry(`${entry.name}.${circuitName}`, () => callTransaction(...circuitArguments));
     } catch (error) {
       const failedAssert = findFailedAssert(error);
       if (failedAssert !== null) throw new ContractRejectedError(contractRejectionMessage(failedAssert));

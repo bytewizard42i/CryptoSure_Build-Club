@@ -55,7 +55,6 @@
 // IDEAS, NOT BUILT
 //   - "any 2 of these 3 checks" in place of "all of them"
 //   - a fee paid when a clearance is granted (this is the natural toll point)
-//   - revoking a clearance early, for a wallet that later lands on a ban list
 //   - hiding the profile: proving "cleared for SOME profile at least this
 //     strict" without naming it
 //   - profiles that require a pass to be younger than N hours, for
@@ -89,6 +88,7 @@ export ledger profiles: Map<Bytes<32>, Profile>;
 export ledger clearances: Map<Bytes<32>, Uint<64>>;
 
 export ledger clearanceCount: Counter;
+export ledger clearancesRevoked: Counter;
 
 // `first_admin` is derive_role_key(the deployer's secret), computed off-chain.
 constructor(first_admin: Bytes<32>) {
@@ -174,6 +174,31 @@ export circuit grant_clearance(ticket: Bytes<32>, profile_id: Bytes<32>, issued_
   clearances.insert(id, valid_until);
   clearanceCount.increment(1);
   return valid_until;
+}
+
+// ADMIN: end a clearance now, before it expires.
+//
+// Until the Nov 25 2026 review a clearance could only run out, so a ticket
+// whose underlying evidence turned bad stayed clear, and PolicyBinder and
+// PairReceipt went on believing it, until the shortest pass expired.
+//
+// HOW THIS FITS WITH REVOKING A PASS. Removing the clearance takes effect
+// immediately for everything that asks `require_clearance`. It does NOT by
+// itself stop the holder calling `grant_clearance` again: that call re-asks
+// every required check, so it succeeds again if the passes are still good —
+// which is the correct answer when the clearance was withdrawn for a reason
+// that has since been dealt with. To put a ticket out and keep it out,
+// revoke the PASS in the check that went bad (`revoke_pass`), and its
+// EVIDENCE (`revoke_*`), and then this clearance. Then `grant_clearance`
+// fails at that check. Documented in docs/design/protocol.md rather than
+// enforced here, because a registry that permanently bricked a ticket would
+// be a worse failure mode than one that can be re-earned.
+export circuit revoke_clearance(ticket: Bytes<32>, profile_id: Bytes<32>): [] {
+  assert_is_admin();
+  const id = derive_clearance_id(disclose(ticket), disclose(profile_id));
+  assert(clearances.member(id), "This ticket is not cleared for this profile");
+  clearances.remove(id);
+  clearancesRevoked.increment(1);
 }
 
 // THE INTERFACE OTHER CONTRACTS USE. Witness-free. Fails unless the ticket
