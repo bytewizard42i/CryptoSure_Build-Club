@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="820" font-family="monospace">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>
+  </defs>
+  <rect width="1180" height="820" fill="#fafaf7"/>
+  <text x="30" y="40" font-size="22" font-weight="bold" fill="#222">CryptoSure — what the protocol does, and what is real, as of Nov 26 2026</text>
+  <text x="30" y="64" font-size="13" fill="#555">Green = REAL DEAL (public Preview chain, real ZK proofs) · Amber = TESTWIRED (real cryptography, fixture data) · Blue = DEMOLAND (simulation, no chain)</text>
+
+  <!-- ============ DEMOLAND band ============ -->
+  <rect x="20" y="85" width="1140" height="150" rx="10" fill="#e8f0fe" stroke="#7ba7e0" stroke-width="1.5"/>
+  <text x="38" y="110" font-size="14" font-weight="bold" fill="#3b5f9e">DEMOLAND — simulation for storytelling, touches no chain</text>
+  <rect x="40" y="125" width="250" height="90" rx="8" fill="#fff" stroke="#7ba7e0"/>
+  <text x="55" y="148" font-size="12" font-weight="bold">frontend-demoland</text>
+  <text x="55" y="166" font-size="11" fill="#444">demo-mode UI: tour, enter flow</text>
+  <text x="55" y="182" font-size="11" fill="#444">simulated screening answers</text>
+  <text x="55" y="198" font-size="11" fill="#444">no wallet, no proofs, no chain</text>
+  <rect x="320" y="125" width="250" height="90" rx="8" fill="#fff" stroke="#7ba7e0"/>
+  <text x="335" y="148" font-size="12" font-weight="bold">frontend-landing</text>
+  <text x="335" y="166" font-size="11" fill="#444">public demo-experience page</text>
+  <text x="335" y="182" font-size="11" fill="#444">scripted walkthrough of the</text>
+  <text x="335" y="198" font-size="11" fill="#444">five tiers and refusal paths</text>
+  <rect x="600" y="125" width="250" height="90" rx="8" fill="#fff" stroke="#7ba7e0"/>
+  <text x="615" y="148" font-size="12" font-weight="bold">TestTown cast + Synthea</text>
+  <text x="615" y="166" font-size="11" fill="#444">fictional citizens, dossiers,</text>
+  <text x="615" y="182" font-size="11" fill="#444">synthetic health crowd (seeded,</text>
+  <text x="615" y="198" font-size="11" fill="#444">byte-identical replays)</text>
+
+  <!-- ============ TESTWIRED band ============ -->
+  <rect x="20" y="255" width="1140" height="150" rx="10" fill="#fef3e0" stroke="#d9a441" stroke-width="1.5"/>
+  <text x="38" y="280" font-size="14" font-weight="bold" fill="#8a6414">TESTWIRED — real contracts and real cryptography, but fixture data and demo keys</text>
+  <rect x="40" y="295" width="265" height="90" rx="8" fill="#fff" stroke="#d9a441"/>
+  <text x="55" y="318" font-size="12" font-weight="bold">mock providers (off-chain)</text>
+  <text x="55" y="336" font-size="11" fill="#444">screening answers looked up in</text>
+  <text x="55" y="352" font-size="11" fill="#444">fixtures/mock-subjects.json — the</text>
+  <text x="55" y="368" font-size="11" fill="#444">ONLY part of the run that is mock</text>
+  <rect x="330" y="295" width="265" height="90" rx="8" fill="#fff" stroke="#d9a441"/>
+  <text x="345" y="318" font-size="12" font-weight="bold">demo operator/admin keys</text>
+  <text x="345" y="336" font-size="11" fill="#444">stand-in keys derivable from the</text>
+  <text x="345" y="352" font-size="11" fill="#444">public repo — fine for a demo,</text>
+  <text x="345" y="368" font-size="11" fill="#444">must be replaced before real users</text>
+  <rect x="620" y="295" width="265" height="90" rx="8" fill="#fff" stroke="#d9a441"/>
+  <text x="635" y="318" font-size="12" font-weight="bold">test subject: bonnie-lachance</text>
+  <text x="635" y="336" font-size="11" fill="#444">the holder in the live end-to-end</text>
+  <text x="635" y="352" font-size="11" fill="#444">run — a fixture person, but her</text>
+  <text x="635" y="368" font-size="11" fill="#444">proofs and txs were 100% real</text>
+
+  <!-- ============ REAL DEAL band ============ -->
+  <rect x="20" y="425" width="1140" height="370" rx="10" fill="#e6f4ea" stroke="#3d9958" stroke-width="2"/>
+  <text x="38" y="450" font-size="14" font-weight="bold" fill="#1e6b38">REAL DEAL — Midnight Preview public chain · deployed, wired, exercised end-to-end Nov 26 2026</text>
+
+  <!-- laptop boundary -->
+  <rect x="40" y="470" width="500" height="305" rx="8" fill="#f4fbf6" stroke="#3d9958" stroke-dasharray="5,3"/>
+  <text x="55" y="492" font-size="12" font-weight="bold" fill="#1e6b38">THIS LAPTOP (all local, 127.0.0.1 — privacy lives here)</text>
+
+  <rect x="60" y="505" width="215" height="80" rx="8" fill="#fff" stroke="#3d9958"/>
+  <text x="72" y="527" font-size="12" font-weight="bold">Sarah's wallet</text>
+  <text x="72" y="545" font-size="11" fill="#444">15,000 tNIGHT + DUST</text>
+  <text x="72" y="561" font-size="11" fill="#444">signs every transaction</text>
+  <text x="72" y="577" font-size="11" fill="#444">funded at the Preview faucet</text>
+
+  <rect x="60" y="605" width="215" height="80" rx="8" fill="#fff" stroke="#3d9958"/>
+  <text x="72" y="627" font-size="12" font-weight="bold">proof server (Docker)</text>
+  <text x="72" y="645" font-size="11" fill="#444">generates the zero-knowledge</text>
+  <text x="72" y="661" font-size="11" fill="#444">proofs locally — private data</text>
+  <text x="72" y="677" font-size="11" fill="#444">never leaves this machine</text>
+
+  <rect x="305" y="505" width="215" height="80" rx="8" fill="#fff" stroke="#3d9958"/>
+  <text x="317" y="527" font-size="12" font-weight="bold">deploy + clearance tooling</text>
+  <text x="317" y="545" font-size="11" fill="#444">deploy-program.mjs (8 contracts)</text>
+  <text x="317" y="561" font-size="11" fill="#444">run-one-clearance.mjs (14 txs)</text>
+  <text x="317" y="577" font-size="11" fill="#444">protocol code unchanged from tests</text>
+
+  <rect x="305" y="605" width="215" height="80" rx="8" fill="#fff" stroke="#3d9958"/>
+  <text x="317" y="627" font-size="12" font-weight="bold">witnesses (private state)</text>
+  <text x="317" y="645" font-size="11" fill="#444">holder secrets + Merkle proofs</text>
+  <text x="317" y="661" font-size="11" fill="#444">feed the circuits privately —</text>
+  <text x="317" y="677" font-size="11" fill="#444">nothing identifying is published</text>
+
+  <!-- chain side -->
+  <rect x="600" y="470" width="540" height="305" rx="8" fill="#fff" stroke="#3d9958" stroke-width="2"/>
+  <text x="618" y="492" font-size="12" font-weight="bold" fill="#1e6b38">MIDNIGHT PREVIEW — public chain (anyone can verify)</text>
+
+  <rect x="618" y="505" width="240" height="58" rx="6" fill="#e6f4ea" stroke="#3d9958"/>
+  <text x="628" y="526" font-size="11" font-weight="bold">5 check contracts</text>
+  <text x="628" y="542" font-size="10" fill="#333">BanList · Region · Identity</text>
+  <text x="628" y="555" font-size="10" fill="#333">Education · WalletControl</text>
+
+  <rect x="880" y="505" width="240" height="58" rx="6" fill="#e6f4ea" stroke="#3d9958"/>
+  <text x="890" y="526" font-size="11" font-weight="bold">3 coordination contracts</text>
+  <text x="890" y="542" font-size="10" fill="#333">ClearanceRegistry · PairReceipt</text>
+  <text x="890" y="555" font-size="10" fill="#333">PolicyBinder</text>
+
+  <rect x="618" y="580" width="502" height="62" rx="6" fill="#e6f4ea" stroke="#3d9958"/>
+  <text x="630" y="600" font-size="11" font-weight="bold">wiring on-chain: operators appointed, checks registered,</text>
+  <text x="630" y="615" font-size="11" font-weight="bold">profiles defined, cover classes set</text>
+  <text x="630" y="632" font-size="10" fill="#333">deploy txs confirmed — e.g. cover classes at blocks 283543 / 283547</text>
+
+  <rect x="618" y="658" width="502" height="62" rx="6" fill="#d9efe0" stroke="#1e6b38" stroke-width="2"/>
+  <text x="630" y="678" font-size="11" font-weight="bold">LIVE RESULT: binding on the public ledger (RESULT: BOUND)</text>
+  <text x="630" y="694" font-size="10" fill="#333">bind_policy block 284497 · prove_binding block 284501</text>
+  <text x="630" y="708" font-size="10" fill="#333">14/14 transactions confirmed by the indexer — exit 0</text>
+
+  <!-- infra -->
+  <rect x="618" y="735" width="240" height="42" rx="6" fill="#fff" stroke="#3d9958"/>
+  <text x="628" y="752" font-size="11" font-weight="bold">Preview RPC</text>
+  <text x="628" y="767" font-size="10" fill="#333">transactions enter the chain</text>
+  <rect x="880" y="735" width="240" height="42" rx="6" fill="#fff" stroke="#3d9958"/>
+  <text x="890" y="752" font-size="11" font-weight="bold">public indexer</text>
+  <text x="890" y="767" font-size="10" fill="#333">independently confirmed state</text>
+
+  <!-- arrows -->
+  <line x1="275" y1="545" x2="305" y2="545" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="167" y1="585" x2="167" y2="605" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="412" y1="585" x2="412" y2="605" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="520" y1="560" x2="618" y2="745" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="525" y="640" font-size="10" fill="#555" transform="rotate(38 525 640)">signed txs + ZK proofs only — never raw private data</text>
+  <line x1="858" y1="756" x2="880" y2="756" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="738" y1="563" x2="738" y2="580" stroke="#555" stroke-width="1.5" marker-end="url(#arr)"/>
+  <line x1="869" y1="534" x2="880" y2="534" stroke="#555" stroke-width="1.5" stroke-dasharray="3,2" marker-end="url(#arr)"/>
+  <text x="700" y="500" font-size="10" fill="#555">cross-contract calls inside single proofs</text>
+
+  <!-- vertical flow arrows between bands -->
+  <line x1="165" y1="215" x2="165" y2="253" stroke="#999" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="175" y="240" font-size="10" fill="#777">demoland tells the story; testwired supplies the answers</text>
+  <line x1="165" y1="385" x2="165" y2="423" stroke="#999" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="175" y="410" font-size="10" fill="#777">fixture answers flow into real contracts — everything past this line is real</text>
+</svg>
